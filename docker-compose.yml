@@ -1,0 +1,17 @@
+services:
+  rmi-uploader:
+    build: .
+    container_name: rmi-uploader
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - /tmp/rmi:/tmp/rmi
+    env_file:
+      - .env
+    networks:
+      - rmi-network
+
+networks:
+  rmi-network:
+    driver: bridge
