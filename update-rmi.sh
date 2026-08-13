@@ -94,7 +94,14 @@ COPIED_FILES=""
 for item in "$LATEST"/*; do
   [ -e "$item" ] || continue
   name=$(basename "$item")
-  cp -r "$item" "$APP_DIR/$name"
+  if [ -d "$item" ]; then
+    # mezclar contenido en vez de anidar: si $APP_DIR/$name ya existe,
+    # "cp -r item dest" crea dest/item en vez de fusionar
+    mkdir -p "$APP_DIR/$name"
+    cp -r "$item"/. "$APP_DIR/$name"/
+  else
+    cp -f "$item" "$APP_DIR/$name"
+  fi
   COPIED_FILES="$COPIED_FILES $name"
   echo "Copiado: $name → $APP_DIR/"
 done
