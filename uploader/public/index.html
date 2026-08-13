@@ -1,0 +1,533 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RMI - Actualizar sistema</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f1f5f9;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .card {
+      background: #fff;
+      border-radius: 14px;
+      box-shadow: 0 4px 28px rgba(0,0,0,0.09);
+      width: 100%;
+      max-width: 520px;
+      padding: 40px;
+    }
+
+    .logo      { font-size: 22px; font-weight: 700; color: #0f172a; margin-bottom: 4px; }
+    .logo span { color: #2563eb; }
+    .subtitle  { font-size: 13px; color: #64748b; margin-bottom: 32px; }
+
+    /* ── Section label ── */
+    .field-label {
+      display: block;
+      font-size: 12px;
+      font-weight: 700;
+      color: #64748b;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      margin-bottom: 10px;
+    }
+
+    /* ── Environment selector ── */
+    .env-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 24px; }
+
+    .env-btn {
+      border: 2px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 12px;
+      cursor: pointer;
+      background: #fff;
+      text-align: left;
+      transition: all 0.15s;
+      position: relative;
+    }
+    .env-btn:hover { border-color: #93c5fd; background: #f8fbff; }
+    .env-btn.prod:hover, .env-btn.prod.selected { border-color: #16a34a; background: #f0fdf4; }
+    .env-btn.test:hover, .env-btn.test.selected { border-color: #0369a1; background: #e0f2fe; }
+    .env-btn .env-badge {
+      display: inline-block; padding: 2px 8px; border-radius: 4px;
+      font-size: 11px; font-weight: 700; margin-bottom: 4px;
+    }
+    .env-btn.prod .env-badge { background: #dcfce7; color: #15803d; }
+    .env-btn.test .env-badge { background: #dbeafe; color: #1d4ed8; }
+    .env-btn .env-dir { font-size: 10px; color: #94a3b8; font-family: monospace; word-break: break-all; }
+    .env-btn .app-check {
+      position: absolute; top: 10px; right: 10px;
+      width: 18px; height: 18px; border-radius: 50%;
+      border: 2px solid #cbd5e1; background: #fff;
+      transition: all 0.15s; display: flex; align-items: center; justify-content: center;
+    }
+    .env-btn.prod.selected .app-check { border-color: #16a34a; background: #16a34a; }
+    .env-btn.test.selected .app-check { border-color: #0369a1; background: #0369a1; }
+    .env-btn.selected .app-check::after {
+      content: ''; display: block; width: 5px; height: 9px;
+      border: 2px solid #fff; border-top: none; border-left: none;
+      transform: rotate(45deg) translate(-1px,-1px);
+    }
+
+    /* ── App selector ── */
+    .app-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 24px; }
+
+    .app-btn {
+      border: 2px solid #e2e8f0;
+      border-radius: 10px;
+      padding: 14px 12px;
+      cursor: pointer;
+      background: #fff;
+      text-align: left;
+      transition: all 0.15s;
+      position: relative;
+    }
+    .app-btn:hover { border-color: #93c5fd; background: #f8fbff; }
+    .app-btn.selected { border-color: #2563eb; background: #eff6ff; }
+    .app-btn .app-name  { font-size: 14px; font-weight: 700; color: #0f172a; display: block; }
+    .app-btn .app-sub   { font-size: 11px; color: #64748b; margin-top: 2px; display: block; }
+    .app-btn .app-check {
+      position: absolute; top: 10px; right: 10px;
+      width: 18px; height: 18px;
+      border-radius: 50%;
+      border: 2px solid #cbd5e1;
+      background: #fff;
+      transition: all 0.15s;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .app-btn.selected .app-check { border-color: #2563eb; background: #2563eb; }
+    .app-btn.selected .app-check::after {
+      content: '';
+      display: block;
+      width: 5px; height: 9px;
+      border: 2px solid #fff;
+      border-top: none; border-left: none;
+      transform: rotate(45deg) translate(-1px,-1px);
+    }
+
+    /* ── Upload mode toggle ── */
+    .mode-toggle { display: flex; gap: 0; margin-bottom: 24px; border: 1.5px solid #e2e8f0; border-radius: 8px; overflow: hidden; }
+    .mode-btn {
+      flex: 1; padding: 9px 12px; border: none; background: #fff; cursor: pointer;
+      font-size: 13px; font-weight: 600; color: #64748b; transition: all 0.15s;
+    }
+    .mode-btn:not(:last-child) { border-right: 1.5px solid #e2e8f0; }
+    .mode-btn.active { background: #2563eb; color: #fff; }
+
+    /* ── File inputs ── */
+    .drop-zone {
+      border: 2px dashed #cbd5e1;
+      border-radius: 10px;
+      padding: 28px 16px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-bottom: 20px;
+      position: relative;
+    }
+    .drop-zone.dragover    { border-color: #2563eb; background: #eff6ff; }
+    .drop-zone input       { position: absolute; inset: 0; opacity: 0; cursor: pointer; margin: 0; width: 100%; height: 100%; }
+    .drop-zone .dz-icon    { font-size: 28px; margin-bottom: 6px; }
+    .drop-zone .dz-text    { font-size: 14px; color: #475569; margin-bottom: 4px; }
+    .drop-zone .dz-hint    { font-size: 12px; color: #94a3b8; }
+    .drop-zone .dz-name    { font-size: 13px; font-weight: 600; color: #2563eb; margin-top: 8px; }
+
+    .files-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+    .file-slot  { position: relative; }
+    .file-slot label { font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 5px; }
+    .file-slot .slot-box {
+      border: 1.5px dashed #cbd5e1;
+      border-radius: 8px;
+      padding: 12px 10px;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.15s;
+      position: relative;
+      min-height: 64px;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+    }
+    .file-slot .slot-box:hover       { border-color: #93c5fd; background: #f8fbff; }
+    .file-slot .slot-box.has-file    { border-color: #86efac; background: #f0fdf4; }
+    .file-slot .slot-box input       { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%; }
+    .file-slot .slot-icon { font-size: 18px; }
+    .file-slot .slot-name { font-size: 11px; color: #475569; margin-top: 4px; word-break: break-all; max-width: 120px; }
+    .file-slot .slot-ok   { font-size: 11px; font-weight: 600; color: #16a34a; margin-top: 4px; }
+
+    /* ── Text inputs ── */
+    .input-row { margin-bottom: 20px; }
+    .input-row input {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1.5px solid #e2e8f0;
+      border-radius: 8px;
+      font-size: 14px;
+      color: #1e293b;
+      outline: none;
+      transition: border-color 0.15s;
+    }
+    .input-row input:focus { border-color: #2563eb; }
+    .input-row input::placeholder { color: #94a3b8; }
+
+    /* ── Submit ── */
+    .submit-btn {
+      width: 100%;
+      padding: 13px;
+      background: #2563eb;
+      color: #fff;
+      border: none;
+      border-radius: 9px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s;
+      letter-spacing: 0.01em;
+    }
+    .submit-btn:hover:not(:disabled) { background: #1d4ed8; }
+    .submit-btn:disabled { background: #93c5fd; cursor: not-allowed; }
+
+    /* ── Status ── */
+    .status-box { margin-top: 22px; padding: 14px 16px; border-radius: 9px; font-size: 13px; display: none; }
+    .status-box.success { background: #f0fdf4; border: 1px solid #86efac; color: #166534; display: block; }
+    .status-box.error   { background: #fef2f2; border: 1px solid #fca5a5; color: #991b1b;  display: block; }
+    .status-box .st-title  { font-weight: 700; margin-bottom: 6px; }
+    .status-box .st-detail { line-height: 1.7; }
+
+    /* ── Loader ── */
+    .loader {
+      display: inline-block; width: 14px; height: 14px;
+      border: 2px solid rgba(255,255,255,0.4); border-top-color: #fff;
+      border-radius: 50%; animation: spin 0.6s linear infinite;
+      vertical-align: middle; margin-right: 6px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Footer ── */
+    .made-by { position: fixed; bottom: 16px; right: 20px; font-size: 11px; color: #94a3b8; }
+    .made-by a { color: #2563eb; text-decoration: none; font-weight: 600; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">RMI <span>Consultores</span></div>
+    <div class="subtitle">Panel de actualización del sistema</div>
+
+    <!-- App selector -->
+    <span class="field-label">Selecciona la aplicacion</span>
+    <div class="app-grid">
+      <button type="button" class="app-btn" data-app="gestion" onclick="selectApp(this)">
+        <span class="app-check"></span>
+        <span class="app-name">Gestion RMI</span>
+        <span class="app-sub">Módulo de tareas y clientes</span>
+      </button>
+      <button type="button" class="app-btn" data-app="contabilidad" onclick="selectApp(this)">
+        <span class="app-check"></span>
+        <span class="app-name">Contabilidad RMI</span>
+        <span class="app-sub">Módulo contable</span>
+      </button>
+    </div>
+
+    <!-- Environment selector (solo visible cuando hay más de un ambiente) -->
+    <div id="envSection" style="display:none">
+      <span class="field-label">Ambiente</span>
+      <div class="env-grid" id="envGrid"></div>
+    </div>
+
+    <!-- Upload mode -->
+    <span class="field-label">Tipo de actualización</span>
+    <div class="mode-toggle" style="margin-bottom:20px">
+      <button type="button" class="mode-btn active" id="modeZip"   onclick="setMode('zip')">ZIP completo</button>
+      <button type="button" class="mode-btn"         id="modeFiles" onclick="setMode('files')">Archivos sueltos</button>
+    </div>
+
+    <!-- ZIP drop zone -->
+    <div id="panelZip">
+      <div class="drop-zone" id="dropZone">
+        <input type="file" id="zipInput" accept=".zip">
+        <div class="dz-icon">📦</div>
+        <div class="dz-text">Arrastrá el ZIP o hacé clic para seleccionar</div>
+        <div class="dz-hint">Debe contener: server.js, package.json, public/ y/o views/</div>
+        <div class="dz-name" id="zipName"></div>
+      </div>
+    </div>
+
+    <!-- Individual files grid -->
+    <div id="panelFiles" style="display:none">
+      <div class="files-grid">
+        <div class="file-slot">
+          <label>server.js</label>
+          <div class="slot-box" id="slot_server_js">
+            <input type="file" id="file_server_js" accept=".js" onchange="slotChange(this,'slot_server_js')">
+            <span class="slot-icon">📄</span>
+            <span class="slot-name">Clic para seleccionar</span>
+          </div>
+        </div>
+        <div class="file-slot">
+          <label>package.json</label>
+          <div class="slot-box" id="slot_package_json">
+            <input type="file" id="file_package_json" accept=".json" onchange="slotChange(this,'slot_package_json')">
+            <span class="slot-icon">📄</span>
+            <span class="slot-name">Clic para seleccionar</span>
+          </div>
+        </div>
+        <div class="file-slot">
+          <label>public/ (ZIP)</label>
+          <div class="slot-box" id="slot_public">
+            <input type="file" id="file_public" accept=".zip" onchange="slotChange(this,'slot_public')">
+            <span class="slot-icon">📁</span>
+            <span class="slot-name">Clic para seleccionar</span>
+          </div>
+        </div>
+        <div class="file-slot">
+          <label>index.html</label>
+          <div class="slot-box" id="slot_index_html">
+            <input type="file" id="file_index_html" accept=".html" onchange="slotChange(this,'slot_index_html')">
+            <span class="slot-icon">📄</span>
+            <span class="slot-name">Clic para seleccionar</span>
+          </div>
+        </div>
+        <div class="file-slot">
+          <label>views/ (ZIP)</label>
+          <div class="slot-box" id="slot_views">
+            <input type="file" id="file_views" accept=".zip" onchange="slotChange(this,'slot_views')">
+            <span class="slot-icon">📁</span>
+            <span class="slot-name">Clic para seleccionar</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Password -->
+    <span class="field-label">Contraseña</span>
+    <div class="input-row">
+      <input type="password" id="password" placeholder="••••••••" autocomplete="current-password" oninput="checkReady()">
+    </div>
+
+    <!-- Email -->
+    <span class="field-label">Email para notificación</span>
+    <div class="input-row">
+      <input type="email" id="email" placeholder="usuario@empresa.com" oninput="checkReady()">
+    </div>
+
+    <button class="submit-btn" id="uploadBtn" disabled onclick="uploadFiles()">Subir archivos</button>
+
+    <div class="status-box" id="statusBox">
+      <div class="st-title"  id="stTitle"></div>
+      <div class="st-detail" id="stDetail"></div>
+    </div>
+  </div>
+
+  <div class="made-by">made by <a href="#" tabindex="-1">Cenas-Support</a></div>
+
+  <script>
+    let currentMode = 'zip';
+    let currentApp  = '';   // 'gestion' | 'contabilidad'
+    let currentEnv  = '';   // 'prod' | 'test'
+
+    // app_id que se manda al servidor = currentApp + '_' + currentEnv
+    // excepto contabilidad que solo tiene prod
+
+    const APP_ENVS = {
+      gestion:      [
+        { env: 'prod', label: 'Produccion', dir: '/srv/gestion-rmi/prod'    },
+        { env: 'test', label: 'Testing',    dir: '/srv/gestion-rmi/testing' }
+      ],
+      contabilidad: [
+        { env: 'prod', label: 'Produccion', dir: '/srv/contabilidad-rmi/rmi-contabilidad' }
+      ]
+    };
+
+    // ── App selector ──────────────────────────────────────────────────────────
+
+    function selectApp(btn) {
+      document.querySelectorAll('.app-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      currentApp = btn.dataset.app;
+      currentEnv = '';
+
+      const envs = APP_ENVS[currentApp] || [];
+      const section = document.getElementById('envSection');
+      const grid    = document.getElementById('envGrid');
+
+      if (envs.length === 1) {
+        // Solo un ambiente: seleccionarlo automaticamente, no mostrar selector
+        currentEnv = envs[0].env;
+        section.style.display = 'none';
+      } else {
+        grid.innerHTML = envs.map(e => `
+          <button type="button" class="env-btn ${e.env}" data-env="${e.env}" onclick="selectEnv(this)">
+            <span class="app-check"></span>
+            <span class="env-badge">${e.label}</span><br>
+            <span class="env-dir">${e.dir}</span>
+          </button>`).join('');
+        section.style.display = 'block';
+      }
+      checkReady();
+    }
+
+    // ── Environment selector ──────────────────────────────────────────────────
+
+    function selectEnv(btn) {
+      document.querySelectorAll('.env-btn').forEach(b => b.classList.remove('selected'));
+      btn.classList.add('selected');
+      currentEnv = btn.dataset.env;
+      checkReady();
+    }
+
+    function getAppId() {
+      if (!currentApp || !currentEnv) return '';
+      return `${currentApp}_${currentEnv}`;
+    }
+
+    // ── Mode toggle ───────────────────────────────────────────────────────────
+
+    function setMode(mode) {
+      currentMode = mode;
+      document.getElementById('modeZip').classList.toggle('active',   mode === 'zip');
+      document.getElementById('modeFiles').classList.toggle('active', mode === 'files');
+      document.getElementById('panelZip').style.display   = mode === 'zip'   ? 'block' : 'none';
+      document.getElementById('panelFiles').style.display = mode === 'files' ? 'block' : 'none';
+      checkReady();
+    }
+
+    // ── Drag & drop (ZIP) ─────────────────────────────────────────────────────
+
+    const dropZone = document.getElementById('dropZone');
+    const zipInput = document.getElementById('zipInput');
+
+    zipInput.addEventListener('change', () => {
+      document.getElementById('zipName').textContent = zipInput.files[0] ? zipInput.files[0].name : '';
+      checkReady();
+    });
+
+    dropZone.addEventListener('dragover',  e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+    dropZone.addEventListener('dragleave', ()  => dropZone.classList.remove('dragover'));
+    dropZone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      const file = e.dataTransfer.files[0];
+      if (!file) return;
+      if (!file.name.endsWith('.zip')) { showStatus('error','Archivo no valido','Solo se permiten archivos .zip'); return; }
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      zipInput.files = dt.files;
+      document.getElementById('zipName').textContent = file.name;
+      checkReady();
+    });
+
+    // ── Individual slots ──────────────────────────────────────────────────────
+
+    function slotChange(input, slotId) {
+      const slot = document.getElementById(slotId);
+      const name = input.files[0] ? input.files[0].name : null;
+      if (name) {
+        slot.classList.add('has-file');
+        slot.querySelector('.slot-name').textContent = name;
+      } else {
+        slot.classList.remove('has-file');
+        slot.querySelector('.slot-name').textContent = 'Clic para seleccionar';
+      }
+      checkReady();
+    }
+
+    // ── Validation ────────────────────────────────────────────────────────────
+
+    function checkReady() {
+      const pass     = document.getElementById('password').value.trim();
+      const email    = document.getElementById('email').value.trim();
+      let   hasFiles = false;
+
+      if (currentMode === 'zip') {
+        hasFiles = zipInput.files.length > 0;
+      } else {
+        const ids = ['file_server_js','file_package_json','file_index_html','file_public','file_views'];
+        hasFiles  = ids.some(id => document.getElementById(id).files.length > 0);
+      }
+
+      document.getElementById('uploadBtn').disabled = !(getAppId() && hasFiles && pass && email);
+    }
+
+    // ── Upload ────────────────────────────────────────────────────────────────
+
+    async function uploadFiles() {
+      const pass   = document.getElementById('password').value.trim();
+      const email  = document.getElementById('email').value.trim();
+      const app_id = getAppId();
+      if (!app_id || !pass || !email) return;
+
+      const btn = document.getElementById('uploadBtn');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="loader"></span>Subiendo...';
+      hideStatus();
+
+      const fd = new FormData();
+      fd.append('app',   app_id);
+      fd.append('email', email);
+
+      if (currentMode === 'zip') {
+        fd.append('files', zipInput.files[0]);
+      } else {
+        const slots = [
+          { id: 'file_server_js',    name: 'server.js'    },
+          { id: 'file_package_json', name: 'package.json' },
+          { id: 'file_index_html',   name: 'index.html'   },
+          { id: 'file_public',       name: 'public.zip'   },
+          { id: 'file_views',        name: 'views.zip'    }
+        ];
+        for (const s of slots) {
+          const inp = document.getElementById(s.id);
+          if (inp.files[0]) {
+            const renamed = new File([inp.files[0]], s.name, { type: inp.files[0].type });
+            fd.append('files', renamed);
+          }
+        }
+      }
+
+      try {
+        const res  = await fetch('/upload', { method: 'POST', headers: { 'x-upload-password': pass }, body: fd });
+        const text = await res.text();
+        let data;
+        try {
+          data = JSON.parse(text);
+        } catch {
+          throw new Error(`El servidor respondio HTTP ${res.status} en vez de una respuesta valida — probablemente el archivo es demasiado grande o la conexion se corto.`);
+        }
+
+        if (res.ok && data.ok) {
+          const lista = (data.archivos || []).map(f => `<span style="font-family:monospace;font-size:11px">${f}</span>`).join('<br>');
+          showStatus('success', `Subido correctamente — ${data.app}`,
+            `Ambiente: <strong>${data.ambiente}</strong><br>Directorio: <code>${data.destino}</code><br>Fecha: ${data.fecha}<br>Archivos:<br>${lista}<br><br>Se envio un email de confirmacion a <strong>${email}</strong>.`
+          );
+        } else {
+          showStatus('error', 'Error al subir', data.error || 'Error desconocido');
+        }
+      } catch (e) {
+        showStatus('error', 'Error de conexion', e.message);
+      }
+
+      btn.disabled = false;
+      btn.textContent = 'Subir archivos';
+      checkReady();
+    }
+
+    // ── UI helpers ────────────────────────────────────────────────────────────
+
+    function showStatus(type, title, detail) {
+      const box = document.getElementById('statusBox');
+      box.className = 'status-box ' + type;
+      document.getElementById('stTitle').textContent  = title;
+      document.getElementById('stDetail').innerHTML   = detail;
+    }
+
+    function hideStatus() { document.getElementById('statusBox').className = 'status-box'; }
+  </script>
+</body>
+</html>

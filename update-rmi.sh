@@ -1,9 +1,10 @@
 #!/bin/bash
 # Script de actualizacion del sistema RMI
-# Se ejecuta manualmente en el host (fuera del contenedor del uploader).
 # Uso: ./update-rmi.sh [app] [email]
 #   app   : gestion_prod | gestion_test | contabilidad_prod
 #   email : destinatario del email de confirmacion (opcional, sobreescribe .env)
+# Env vars opcionales:
+#   DEPLOY_SRC : ruta exacta al directorio de upload (lo usa el admin panel)
 
 set -e
 
@@ -27,20 +28,23 @@ case "$APP" in
   gestion_prod)
     APP_LABEL="Gestion RMI"
     APP_ENV="Produccion"
-    APP_DIR="/home/rmi/rmi/rmi-sistema/rmi-prod"
-    CONTAINER="rmi-sistema"
+    APP_DIR="/srv/gestion-rmi/prod"
+    CONTAINER="gestion-rmi"
+    CONTAINER_WORKDIR="/app"
     ;;
   gestion_test)
     APP_LABEL="Gestion RMI"
     APP_ENV="Testing"
-    APP_DIR="/home/rmi/rmi/testing-rmi/rmi-test"
-    CONTAINER="rmi-testing"
+    APP_DIR="/srv/gestion-rmi/testing"
+    CONTAINER="gestion-rmi-testing"
+    CONTAINER_WORKDIR="/app"
     ;;
   contabilidad_prod)
     APP_LABEL="Contabilidad RMI"
     APP_ENV="Produccion"
     APP_DIR="/srv/contabilidad-rmi/rmi-contabilidad"
-    CONTAINER="rmi-contabilidad"
+    CONTAINER="contabilidad-rmi"
+    CONTAINER_WORKDIR="/app"
     ;;
   *)
     echo "ERROR: app desconocida '$APP'. Usar: gestion_prod | gestion_test | contabilidad_prod"
@@ -51,14 +55,20 @@ esac
 echo "=== Actualizacion RMI — $APP_LABEL ($APP_ENV) ==="
 
 # ── Resolver directorio fuente ────────────────────────────────────────────────
-echo "Buscando archivos en: $UPLOAD_DIR"
-LATEST=$(ls -1d "$UPLOAD_DIR/${APP}_"* 2>/dev/null | sort | tail -1)
-if [ -z "$LATEST" ]; then
-  echo "ERROR: No hay archivos subidos para '$APP' en $UPLOAD_DIR"
-  echo "El cliente debe subir los archivos primero desde el uploader (puerto 8080)."
-  exit 1
+# DEPLOY_SRC puede venir del admin panel (apunta al upload exacto)
+if [ -n "$DEPLOY_SRC" ]; then
+  LATEST="$DEPLOY_SRC"
+  echo "Fuente (admin): $LATEST"
+else
+  echo "Buscando archivos en: $UPLOAD_DIR"
+  LATEST=$(ls -1d "$UPLOAD_DIR/${APP}_"* 2>/dev/null | sort | tail -1)
+  if [ -z "$LATEST" ]; then
+    echo "ERROR: No hay archivos subidos para '$APP' en $UPLOAD_DIR"
+    echo "El cliente debe subir los archivos primero desde el uploader (puerto 8080)."
+    exit 1
+  fi
+  echo "Directorio de upload (ultimo): $LATEST"
 fi
-echo "Directorio de upload (ultimo): $LATEST"
 
 if [ ! -d "$LATEST" ]; then
   echo "ERROR: Directorio no existe: $LATEST"
@@ -90,13 +100,21 @@ for item in "$LATEST"/*; do
 done
 
 # ── Reiniciar contenedor ──────────────────────────────────────────────────────
-COMPOSE_FILE="$SCRIPT_DIR/docker-compose.yml"
-if [ -f "$COMPOSE_FILE" ]; then
-  echo "Reiniciando contenedor $CONTAINER..."
-  docker compose -f "$COMPOSE_FILE" restart "$CONTAINER" 2>&1 && RESTART_OK=true || RESTART_OK=false
-else
-  echo "AVISO: docker-compose.yml no encontrado en $SCRIPT_DIR, saltando restart."
-  RESTART_OK=false
+echo "Reiniciando contenedor $CONTAINER..."
+docker restart "$CONTAINER" 2>&1 && RESTART_OK=true || RESTART_OK=false
+
+# ── Validar que el contenedor esta sirviendo el server.js recien copiado ──────
+if [ "$RESTART_OK" = "true" ] && [ -f "$APP_DIR/server.js" ]; then
+  sleep 2
+  HOST_HASH=$(md5sum "$APP_DIR/server.js" | awk '{print $1}')
+  CONTAINER_HASH=$(docker exec "$CONTAINER" md5sum "$CONTAINER_WORKDIR/server.js" 2>/dev/null | awk '{print $1}')
+  if [ -z "$CONTAINER_HASH" ]; then
+    echo "Validacion: no se pudo leer server.js dentro del contenedor (revisar ruta $CONTAINER_WORKDIR/server.js)."
+  elif [ "$HOST_HASH" = "$CONTAINER_HASH" ]; then
+    echo "Validacion: OK — el contenedor esta sirviendo el server.js recien copiado ($HOST_HASH)."
+  else
+    echo "Validacion: ALERTA — el server.js del contenedor NO coincide con el del host (host=$HOST_HASH, contenedor=$CONTAINER_HASH). Puede que la imagen necesite --build en vez de restart."
+  fi
 fi
 
 DEPLOY_DATE=$(date '+%Y-%m-%d %H:%M:%S')
@@ -107,48 +125,3 @@ echo "Archivos:$COPIED_FILES"
 echo "Backup: $BACKUP_DIR"
 echo "Fecha: $DEPLOY_DATE"
 echo "==================================================="
-
-# ── Notificacion Resend ───────────────────────────────────────────────────────
-if [ -z "$RESEND_API_KEY" ]; then
-  echo "Resend: sin API key, email omitido."
-  exit 0
-fi
-
-if [ -z "$NOTIFY_EMAIL" ]; then
-  echo "Resend: sin email de destino (DEPLOY_NOTIFY_EMAIL en .env o segundo argumento)."
-  exit 0
-fi
-
-FILE_LIST=""
-for f in $COPIED_FILES; do
-  FILE_LIST="${FILE_LIST}<li style='margin:2px 0;'>$f</li>"
-done
-
-RESTART_TEXT="No aplicado (docker-compose.yml no encontrado)"
-if [ "$RESTART_OK" = "true" ]; then
-  RESTART_TEXT="OK — contenedor $CONTAINER reiniciado"
-fi
-
-JSON_BODY=$(cat <<EOF
-{
-  "from": "$RESEND_FROM",
-  "to": ["$NOTIFY_EMAIL"],
-  "subject": "[RMI] Deploy aplicado — $APP_LABEL ($APP_ENV)",
-  "html": "<div style='font-family:sans-serif;max-width:480px;color:#1e293b'><h2 style='color:#16a34a;margin-bottom:8px'>RMI Deploy — OK</h2><p style='margin-bottom:16px'>El deploy fue aplicado correctamente en el servidor.</p><table style='width:100%;border-collapse:collapse;font-size:13px'><tr><td style='padding:6px 0;color:#64748b;width:120px'>Aplicacion</td><td><strong>$APP_LABEL</strong></td></tr><tr><td style='padding:6px 0;color:#64748b'>Ambiente</td><td><strong>$APP_ENV</strong></td></tr><tr><td style='padding:6px 0;color:#64748b'>Directorio</td><td><code style='font-size:12px'>$APP_DIR</code></td></tr><tr><td style='padding:6px 0;color:#64748b'>Fecha</td><td>$DEPLOY_DATE</td></tr><tr><td style='padding:6px 0;color:#64748b'>Archivos</td><td><ul style='margin:0;padding-left:16px'>$FILE_LIST</ul></td></tr><tr><td style='padding:6px 0;color:#64748b'>Backup</td><td><code style='font-size:12px'>$BACKUP_DIR</code></td></tr><tr><td style='padding:6px 0;color:#64748b'>Restart</td><td>$RESTART_TEXT</td></tr></table><p style='margin-top:20px;font-size:12px;color:#94a3b8'>Este mensaje fue generado automaticamente por RMI Deploy.</p></div>"
-}
-EOF
-)
-
-HTTP_STATUS=$(curl -s -o /tmp/resend_response.txt -w "%{http_code}" \
-  -X POST https://api.resend.com/emails \
-  -H "Authorization: Bearer $RESEND_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d "$JSON_BODY")
-
-RESPONSE=$(cat /tmp/resend_response.txt)
-
-if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 300 ]; then
-  echo "Resend: email enviado a $NOTIFY_EMAIL (HTTP $HTTP_STATUS)"
-else
-  echo "Resend: ERROR HTTP $HTTP_STATUS — $RESPONSE"
-fi

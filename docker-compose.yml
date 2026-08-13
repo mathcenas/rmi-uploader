@@ -1,12 +1,18 @@
 services:
   rmi-uploader:
-    build: .
+    build: ./uploader
     container_name: rmi-uploader
     restart: unless-stopped
     ports:
       - "8080:8080"
     volumes:
       - /tmp/rmi:/tmp/rmi
+      - ./update-rmi.sh:/update-rmi.sh:ro
+      - ./backups:/backups
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /srv/gestion-rmi/prod:/srv/gestion-rmi/prod
+      - /srv/gestion-rmi/testing:/srv/gestion-rmi/testing
+      - /srv/contabilidad-rmi/rmi-contabilidad:/srv/contabilidad-rmi/rmi-contabilidad
     env_file:
       - .env
     networks:
