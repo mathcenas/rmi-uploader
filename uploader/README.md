@@ -22,11 +22,19 @@ deploye al servidor real, y pueda restaurar un backup si algo sale mal.
 Todo pasa por el objeto `APPS` en `server.js` y el `case` de `update-rmi.sh` —
 **tienen que estar sincronizados a mano**, no hay una única fuente de verdad:
 
-| app_id              | directorio real                          | contenedor            |
-|----------------------|-------------------------------------------|------------------------|
-| `gestion_prod`        | `/srv/gestion-rmi/prod`                  | `gestion-rmi`          |
-| `gestion_test`        | `/srv/gestion-rmi/testing`               | `gestion-rmi-testing`  |
-| `contabilidad_prod`   | `/srv/contabilidad-rmi/rmi-contabilidad` | `contabilidad-rmi`     |
+| app_id               | directorio real                       | contenedor              |
+|-----------------------|-----------------------------------------|---------------------------|
+| `gestion_prod`         | `/srv/gestion-rmi/prod`               | `gestion-rmi`            |
+| `gestion_test`         | `/srv/gestion-rmi/testing`            | `gestion-rmi-testing`    |
+| `contabilidad_prod`    | `/srv/contabilidad-rmi/prod`          | `contabilidad-rmi`       |
+| `contabilidad_test`    | `/srv/contabilidad-rmi/testing`       | `contabilidad-rmi-testing` |
+| `portal_web_prod`      | `/srv/portal-web`                     | `portal-web`             |
+
+> `contabilidad_prod` migró de `/srv/contabilidad-rmi/rmi-contabilidad` a
+> `/srv/contabilidad-rmi/prod` para seguir la misma convención que gestión
+> (`/prod` + `/testing`). Ver la sección de migración más abajo — **esto
+> requiere mover la carpeta real en el server**, no alcanza con el cambio
+> de código.
 
 Para agregar `web_rmi` (o cualquier app nueva) hay que tocar **tres lugares**:
 
@@ -80,7 +88,7 @@ services:
       - ./logs:/app/logs
 ```
 
-**`/srv/contabilidad-rmi/rmi-contabilidad/docker-compose.yml`**:
+**`/srv/contabilidad-rmi/prod/docker-compose.yml`**:
 ```yaml
 services:
   contabilidad-rmi:
@@ -90,6 +98,48 @@ services:
     ports:
       - "3002:3000"   # ajustar al puerto real que use esta app
 ```
+
+**`/srv/contabilidad-rmi/testing/docker-compose.yml`** (nuevo — hoy no existe):
+```yaml
+services:
+  contabilidad-rmi-testing:
+    build: .
+    container_name: contabilidad-rmi-testing
+    restart: unless-stopped
+    ports:
+      - "3003:3000"   # ajustar a un puerto libre
+```
+
+**`/srv/portal-web/docker-compose.yml`** (nuevo — hoy no existe):
+```yaml
+services:
+  portal-web:
+    build: .
+    container_name: portal-web
+    restart: unless-stopped
+    ports:
+      - "3004:3000"   # ajustar al puerto real que use el portal
+```
+
+### Migrar Contabilidad RMI de `rmi-contabilidad` a `prod`
+
+Este contenedor ya está en producción, así que hay que mover la carpeta sin
+tirar el servicio abajo más de lo necesario:
+
+```bash
+cd /srv/contabilidad-rmi
+sudo docker compose -f rmi-contabilidad/docker-compose.yml down
+sudo mv rmi-contabilidad prod
+cd prod
+# editar docker-compose.yml: container_name ya deberia decir contabilidad-rmi (no cambia)
+sudo docker compose up -d --build
+```
+
+Después de esto, `update-rmi.sh` (con el path nuevo `/srv/contabilidad-rmi/prod`)
+va a encontrar todo donde corresponde. Mientras no se haga esta migración,
+un deploy de `contabilidad_prod` va a copiar archivos a una carpeta `prod/`
+que no existe todavía y el contenedor real (que sigue leyendo de
+`rmi-contabilidad/`) no va a ver los cambios.
 
 Si alguno de estos contenedores ya existe pero con otro nombre (por ejemplo
 quedó de una migración vieja, tipo `rmi-sistema1.1`), lo más simple es

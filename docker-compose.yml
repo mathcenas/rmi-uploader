@@ -12,7 +12,9 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
       - /srv/gestion-rmi/prod:/srv/gestion-rmi/prod
       - /srv/gestion-rmi/testing:/srv/gestion-rmi/testing
-      - /srv/contabilidad-rmi/rmi-contabilidad:/srv/contabilidad-rmi/rmi-contabilidad
+      - /srv/contabilidad-rmi/prod:/srv/contabilidad-rmi/prod
+      - /srv/contabilidad-rmi/testing:/srv/contabilidad-rmi/testing
+      - /srv/portal-web:/srv/portal-web
     env_file:
       - .env
     networks:

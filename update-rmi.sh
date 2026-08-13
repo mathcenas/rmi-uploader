@@ -1,7 +1,7 @@
 #!/bin/bash
 # Script de actualizacion del sistema RMI
 # Uso: ./update-rmi.sh [app] [email]
-#   app   : gestion_prod | gestion_test | contabilidad_prod
+#   app   : gestion_prod | gestion_test | contabilidad_prod | contabilidad_test | portal_web_prod
 #   email : destinatario del email de confirmacion (opcional, sobreescribe .env)
 # Env vars opcionales:
 #   DEPLOY_SRC : ruta exacta al directorio de upload (lo usa el admin panel)
@@ -42,12 +42,26 @@ case "$APP" in
   contabilidad_prod)
     APP_LABEL="Contabilidad RMI"
     APP_ENV="Produccion"
-    APP_DIR="/srv/contabilidad-rmi/rmi-contabilidad"
+    APP_DIR="/srv/contabilidad-rmi/prod"
     CONTAINER="contabilidad-rmi"
     CONTAINER_WORKDIR="/app"
     ;;
+  contabilidad_test)
+    APP_LABEL="Contabilidad RMI"
+    APP_ENV="Testing"
+    APP_DIR="/srv/contabilidad-rmi/testing"
+    CONTAINER="contabilidad-rmi-testing"
+    CONTAINER_WORKDIR="/app"
+    ;;
+  portal_web_prod)
+    APP_LABEL="Portal Web"
+    APP_ENV="Produccion"
+    APP_DIR="/srv/portal-web"
+    CONTAINER="portal-web"
+    CONTAINER_WORKDIR="/app"
+    ;;
   *)
-    echo "ERROR: app desconocida '$APP'. Usar: gestion_prod | gestion_test | contabilidad_prod"
+    echo "ERROR: app desconocida '$APP'. Usar: gestion_prod | gestion_test | contabilidad_prod | contabilidad_test | portal_web_prod"
     exit 1
     ;;
 esac

@@ -233,6 +233,11 @@
         <span class="app-name">Contabilidad RMI</span>
         <span class="app-sub">Módulo contable</span>
       </button>
+      <button type="button" class="app-btn" data-app="portal_web" onclick="selectApp(this)">
+        <span class="app-check"></span>
+        <span class="app-name">Portal Web</span>
+        <span class="app-sub">Sitio web</span>
+      </button>
     </div>
 
     <!-- Environment selector (solo visible cuando hay más de un ambiente) -->
@@ -329,11 +334,11 @@
 
   <script>
     let currentMode = 'zip';
-    let currentApp  = '';   // 'gestion' | 'contabilidad'
+    let currentApp  = '';   // 'gestion' | 'contabilidad' | 'portal_web'
     let currentEnv  = '';   // 'prod' | 'test'
 
     // app_id que se manda al servidor = currentApp + '_' + currentEnv
-    // excepto contabilidad que solo tiene prod
+    // excepto portal_web que solo tiene prod
 
     const APP_ENVS = {
       gestion:      [
@@ -341,7 +346,11 @@
         { env: 'test', label: 'Testing',    dir: '/srv/gestion-rmi/testing' }
       ],
       contabilidad: [
-        { env: 'prod', label: 'Produccion', dir: '/srv/contabilidad-rmi/rmi-contabilidad' }
+        { env: 'prod', label: 'Produccion', dir: '/srv/contabilidad-rmi/prod'    },
+        { env: 'test', label: 'Testing',    dir: '/srv/contabilidad-rmi/testing' }
+      ],
+      portal_web: [
+        { env: 'prod', label: 'Produccion', dir: '/srv/portal-web' }
       ]
     };
 

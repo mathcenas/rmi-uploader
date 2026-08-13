@@ -16,9 +16,11 @@ const RESEND_API_KEY  = process.env.RESEND_API_KEY  || '';
 const RESEND_FROM     = process.env.RESEND_FROM     || 'RMI Uploader <noreply@cenas.com.uy>';
 
 const APPS = {
-  gestion_prod:      { label: 'Gestion RMI',      env: 'Produccion', dir: '/srv/gestion-rmi/prod',                  container: 'gestion-rmi' },
-  gestion_test:      { label: 'Gestion RMI',      env: 'Testing',    dir: '/srv/gestion-rmi/testing',               container: 'gestion-rmi-testing' },
-  contabilidad_prod: { label: 'Contabilidad RMI', env: 'Produccion', dir: '/srv/contabilidad-rmi/rmi-contabilidad', container: 'contabilidad-rmi' },
+  gestion_prod:      { label: 'Gestion RMI',      env: 'Produccion', dir: '/srv/gestion-rmi/prod',        container: 'gestion-rmi' },
+  gestion_test:      { label: 'Gestion RMI',      env: 'Testing',    dir: '/srv/gestion-rmi/testing',     container: 'gestion-rmi-testing' },
+  contabilidad_prod: { label: 'Contabilidad RMI', env: 'Produccion', dir: '/srv/contabilidad-rmi/prod',   container: 'contabilidad-rmi' },
+  contabilidad_test: { label: 'Contabilidad RMI', env: 'Testing',    dir: '/srv/contabilidad-rmi/testing',container: 'contabilidad-rmi-testing' },
+  portal_web_prod:   { label: 'Portal Web',       env: 'Produccion', dir: '/srv/portal-web',              container: 'portal-web' },
 };
 
 const ALLOWED_FILES = new Set(['server.js', 'package.json', 'index.html']);
