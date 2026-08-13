@@ -14,7 +14,7 @@ services:
       - /srv/gestion-rmi/testing:/srv/gestion-rmi/testing
       - /srv/contabilidad-rmi/prod:/srv/contabilidad-rmi/prod
       - /srv/contabilidad-rmi/testing:/srv/contabilidad-rmi/testing
-      - /srv/portal-web:/srv/portal-web
+      - /srv/rmi-web:/srv/rmi-web
     env_file:
       - .env
     networks:

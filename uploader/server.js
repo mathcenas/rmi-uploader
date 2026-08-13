@@ -20,7 +20,7 @@ const APPS = {
   gestion_test:      { label: 'Gestion RMI',      env: 'Testing',    dir: '/srv/gestion-rmi/testing',     container: 'gestion-rmi-testing' },
   contabilidad_prod: { label: 'Contabilidad RMI', env: 'Produccion', dir: '/srv/contabilidad-rmi/prod',   container: 'contabilidad-rmi' },
   contabilidad_test: { label: 'Contabilidad RMI', env: 'Testing',    dir: '/srv/contabilidad-rmi/testing',container: 'contabilidad-rmi-testing' },
-  portal_web_prod:   { label: 'Portal Web',       env: 'Produccion', dir: '/srv/portal-web',              container: 'portal-web' },
+  portal_web_prod:   { label: 'Portal Web',       env: 'Produccion', dir: '/srv/rmi-web',                  container: 'rmi_consultores_apache' },
 };
 
 const ALLOWED_FILES = new Set(['server.js', 'package.json', 'index.html']);

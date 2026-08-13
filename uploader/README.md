@@ -22,13 +22,19 @@ deploye al servidor real, y pueda restaurar un backup si algo sale mal.
 Todo pasa por el objeto `APPS` en `server.js` y el `case` de `update-rmi.sh` —
 **tienen que estar sincronizados a mano**, no hay una única fuente de verdad:
 
-| app_id               | directorio real                       | contenedor              |
-|-----------------------|-----------------------------------------|---------------------------|
-| `gestion_prod`         | `/srv/gestion-rmi/prod`               | `gestion-rmi`            |
-| `gestion_test`         | `/srv/gestion-rmi/testing`            | `gestion-rmi-testing`    |
-| `contabilidad_prod`    | `/srv/contabilidad-rmi/prod`          | `contabilidad-rmi`       |
-| `contabilidad_test`    | `/srv/contabilidad-rmi/testing`       | `contabilidad-rmi-testing` |
-| `portal_web_prod`      | `/srv/portal-web`                     | `portal-web`             |
+| app_id               | directorio real                       | contenedor                 |
+|-----------------------|-----------------------------------------|------------------------------|
+| `gestion_prod`         | `/srv/gestion-rmi/prod`               | `gestion-rmi`               |
+| `gestion_test`         | `/srv/gestion-rmi/testing`            | `gestion-rmi-testing`       |
+| `contabilidad_prod`    | `/srv/contabilidad-rmi/prod`          | `contabilidad-rmi`          |
+| `contabilidad_test`    | `/srv/contabilidad-rmi/testing`       | `contabilidad-rmi-testing`  |
+| `portal_web_prod`      | `/srv/rmi-web`                        | `rmi_consultores_apache`    |
+
+Portal Web es un caso distinto a las demás: no es una app Node, es un
+`httpd:alpine` sirviendo un único `index.html` bind-mounteado
+(`./index.html:/usr/local/apache2/htdocs/index.html:ro`). Por eso su archivo
+de validación es `index.html` (no `server.js`) — ver `VALIDATE_FILE` /
+`CONTAINER_VALIDATE_PATH` en `update-rmi.sh`.
 
 > `contabilidad_prod` migró de `/srv/contabilidad-rmi/rmi-contabilidad` a
 > `/srv/contabilidad-rmi/prod` para seguir la misma convención que gestión
@@ -99,27 +105,25 @@ services:
       - "3002:3000"   # ajustar al puerto real que use esta app
 ```
 
-**`/srv/contabilidad-rmi/testing/docker-compose.yml`** (nuevo — hoy no existe):
-```yaml
-services:
-  contabilidad-rmi-testing:
-    build: .
-    container_name: contabilidad-rmi-testing
-    restart: unless-stopped
-    ports:
-      - "3003:3000"   # ajustar a un puerto libre
-```
+**`/srv/contabilidad-rmi/testing/docker-compose.yml`**: ya está armado en el
+server con el mismo patrón que prod (`container_name: contabilidad-rmi-testing`).
 
-**`/srv/portal-web/docker-compose.yml`** (nuevo — hoy no existe):
+**`/srv/rmi-web/docker-compose.yml`** (Portal Web — ya existe, no es una app
+Node, es Apache sirviendo un `index.html` suelto):
 ```yaml
 services:
-  portal-web:
-    build: .
-    container_name: portal-web
-    restart: unless-stopped
+  web:
+    image: httpd:alpine
+    container_name: rmi_consultores_apache
     ports:
-      - "3004:3000"   # ajustar al puerto real que use el portal
+      - "3012:80"
+    volumes:
+      - ./index.html:/usr/local/apache2/htdocs/index.html:ro
+    restart: always
 ```
+Acá el deploy solo tiene sentido con un `index.html` suelto (o dentro de un
+ZIP con `index.html` en la raíz) — no hay `server.js`/`package.json`/`public`/
+`views` que copiar.
 
 ### Migrar Contabilidad RMI de `rmi-contabilidad` a `prod`
 
@@ -206,8 +210,9 @@ que apunten al nombre real.
    - copia los archivos nuevos a `APP_DIR`,
    - hace `docker restart <container>`,
    - **valida** que el restart haya funcionado: compara el hash MD5 del
-     `server.js` recien copiado en el host contra el que el contenedor
-     tiene adentro (`docker exec <container> md5sum <CONTAINER_WORKDIR>/server.js`).
+     `VALIDATE_FILE` (`server.js` para las apps Node, `index.html` para
+     Portal Web) recién copiado en el host contra el que el contenedor
+     tiene adentro en `CONTAINER_VALIDATE_PATH`.
 4. El log se ve en vivo en el panel (SSE), incluida la linea de validacion.
    Si `docker restart` falla porque el contenedor no existe todavía, los
    archivos igual quedan copiados — solo falta levantar el contenedor a mano
