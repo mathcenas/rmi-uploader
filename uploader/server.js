@@ -4,25 +4,28 @@ const path     = require('path');
 const fs       = require('fs');
 const AdmZip   = require('adm-zip');
 const https    = require('https');
+const { spawn, execFile } = require('child_process');
 
 const app             = express();
 const PORT            = process.env.PORT            || 8080;
 const UPLOAD_DIR      = process.env.UPLOAD_DIR      || '/tmp/rmi';
+const BACKUPS_DIR     = process.env.BACKUPS_DIR     || '/backups';
 const UPLOAD_PASSWORD = process.env.UPLOAD_PASSWORD || 'rmi2024';
 const ADMIN_PASSWORD  = process.env.ADMIN_PASSWORD  || 'admin2024';
 const RESEND_API_KEY  = process.env.RESEND_API_KEY  || '';
 const RESEND_FROM     = process.env.RESEND_FROM     || 'RMI Uploader <noreply@cenas.com.uy>';
 
 const APPS = {
-  gestion_prod:      { label: 'Gestion RMI',       env: 'Produccion', dir: '/home/rmi/rmi/rmi-sistema/rmi-prod' },
-  gestion_test:      { label: 'Gestion RMI',        env: 'Testing',    dir: '/home/rmi/rmi/testing-rmi/rmi-test' },
-  contabilidad_prod: { label: 'Contabilidad RMI',   env: 'Produccion', dir: '/srv/contabilidad-rmi/rmi-contabilidad' },
+  gestion_prod:      { label: 'Gestion RMI',      env: 'Produccion', dir: '/srv/gestion-rmi/prod',                  container: 'gestion-rmi' },
+  gestion_test:      { label: 'Gestion RMI',      env: 'Testing',    dir: '/srv/gestion-rmi/testing',               container: 'gestion-rmi-testing' },
+  contabilidad_prod: { label: 'Contabilidad RMI', env: 'Produccion', dir: '/srv/contabilidad-rmi/rmi-contabilidad', container: 'contabilidad-rmi' },
 };
 
-const ALLOWED_FILES = new Set(['server.js', 'package.json']);
+const ALLOWED_FILES = new Set(['server.js', 'package.json', 'index.html']);
 const ALLOWED_DIRS  = new Set(['public', 'views']);
 
 fs.mkdirSync(UPLOAD_DIR, { recursive: true });
+fs.mkdirSync(BACKUPS_DIR, { recursive: true });
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -186,6 +189,10 @@ app.post('/upload', uploadAuth, (req, res) => {
 
       cleanTmp(req._tmpDir);
 
+      // ── Guardar meta (email del uploader) ─────────────────────────────────
+      const meta = { email, app: app_id, label: appCfg.label, env: appCfg.env, date: new Date().toISOString() };
+      try { fs.writeFileSync(path.join(destDir, '_meta.json'), JSON.stringify(meta)); } catch {}
+
       // ── Notificacion email ─────────────────────────────────────────────────
       if (email) {
         const fileList = uploadedFiles.map(f => `<li style="margin:2px 0;">${f}</li>`).join('');
@@ -332,6 +339,150 @@ app.post('/mgmt/delete', adminAuth, (req, res) => {
     res.json({ ok: true });
   } catch (e) {
     res.status(500).json({ error: e.message });
+  }
+});
+
+// Ejecuta update-rmi.sh contra srcPath (un upload o un backup) y streamea el
+// log por SSE. Usado tanto por /mgmt/deploy como por /mgmt/restore.
+function runDeploy(res, app_id, srcPath, notify, uploaderEmail, label) {
+  const scriptPath = path.join(__dirname, '..', 'update-rmi.sh');
+
+  console.log(`[${label}] app=${app_id} src=${srcPath} admin=${notify || '(ninguno)'} uploader=${uploaderEmail || '(ninguno)'}`);
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders();
+
+  const emit = (data, event = 'log') => {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  };
+
+  const env  = { ...process.env, DEPLOY_SRC: srcPath, DEPLOY_NOTIFY_EMAIL: '' };
+  const proc = spawn('bash', [scriptPath, app_id], { env });
+
+  proc.stdout.on('data', d => { console.log(`[${label}]`, d.toString().trimEnd()); emit(d.toString()); });
+  proc.stderr.on('data', d => { console.error(`[${label}:err]`, d.toString().trimEnd()); emit(d.toString()); });
+
+  proc.on('close', code => {
+    console.log(`[${label}] exit=${code}`);
+
+    const appCfg     = APPS[app_id];
+    const deployDate = fmtDate(new Date());
+    const accion      = label === 'restore' ? 'Restauracion aplicada' : 'Deploy aplicado';
+    const subject     = `[RMI] ${accion} — ${appCfg.label} (${appCfg.env})`;
+    const html = `<div style="font-family:sans-serif;max-width:480px;color:#1e293b">
+      <h2 style="color:#16a34a;margin-bottom:8px">RMI ${label === 'restore' ? 'Restore' : 'Deploy'} — ${code === 0 ? 'OK' : 'ERROR'}</h2>
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <tr><td style="padding:6px 0;color:#64748b;width:120px">Aplicacion</td><td><strong>${appCfg.label}</strong></td></tr>
+        <tr><td style="padding:6px 0;color:#64748b">Ambiente</td><td><strong>${appCfg.env}</strong></td></tr>
+        <tr><td style="padding:6px 0;color:#64748b">Directorio</td><td><code style="font-size:12px">${appCfg.dir}</code></td></tr>
+        <tr><td style="padding:6px 0;color:#64748b">Fecha</td><td>${deployDate}</td></tr>
+        <tr><td style="padding:6px 0;color:#64748b">Estado</td><td><strong>${code === 0 ? 'Exitoso' : 'Fallo (codigo ' + code + ')'}</strong></td></tr>
+      </table>
+      <p style="margin-top:20px;font-size:12px;color:#94a3b8">RMI ${label === 'restore' ? 'Restore' : 'Deploy'} automatico.</p>
+    </div>`;
+
+    if (code === 0) {
+      if (uploaderEmail) sendResend(uploaderEmail, subject, html);
+      if (notify && notify !== uploaderEmail) sendResend(notify, subject, html);
+    }
+
+    emit({ code, ok: code === 0 }, 'done');
+    res.end();
+  });
+
+  proc.on('error', err => {
+    emit(`No se pudo ejecutar update-rmi.sh: ${err.message}`);
+    emit({ code: -1, ok: false }, 'done');
+    res.end();
+  });
+}
+
+app.post('/mgmt/deploy', adminAuth, (req, res) => {
+  const { name, email } = req.body || {};
+  if (!name || typeof name !== 'string' || name.includes('/') || name.includes('..')) {
+    return res.status(400).json({ error: 'Nombre invalido' });
+  }
+
+  const knownApps = Object.keys(APPS);
+  const app_id = knownApps.find(id => name.startsWith(id + '_'));
+  if (!app_id) return res.status(400).json({ error: 'No se pudo inferir la app del nombre del directorio' });
+
+  const uploadPath = path.join(UPLOAD_DIR, name);
+  if (!fs.existsSync(uploadPath)) return res.status(404).json({ error: 'Directorio no encontrado' });
+
+  const notify = email || process.env.DEPLOY_NOTIFY_EMAIL || '';
+
+  // ── Leer email del uploader original ─────────────────────────────────────
+  let uploaderEmail = '';
+  try {
+    const metaPath = path.join(uploadPath, '_meta.json');
+    if (fs.existsSync(metaPath)) {
+      uploaderEmail = (JSON.parse(fs.readFileSync(metaPath, 'utf-8')).email || '').trim();
+    }
+  } catch {}
+
+  runDeploy(res, app_id, uploadPath, notify, uploaderEmail, 'deploy');
+});
+
+app.post('/mgmt/restore', adminAuth, (req, res) => {
+  const { name, email } = req.body || {};
+  if (!name || typeof name !== 'string' || name.includes('/') || name.includes('..')) {
+    return res.status(400).json({ error: 'Nombre invalido' });
+  }
+
+  const knownApps = Object.keys(APPS);
+  const app_id = knownApps.find(id => name.startsWith(id + '_'));
+  if (!app_id) return res.status(400).json({ error: 'No se pudo inferir la app del nombre del backup' });
+
+  const backupPath = path.join(BACKUPS_DIR, name);
+  if (!fs.existsSync(backupPath)) return res.status(404).json({ error: 'Backup no encontrado' });
+
+  const notify = email || process.env.DEPLOY_NOTIFY_EMAIL || '';
+
+  runDeploy(res, app_id, backupPath, notify, '', 'restore');
+});
+
+app.get('/mgmt/backups', adminAuth, (req, res) => {
+  try {
+    const entries = fs.readdirSync(BACKUPS_DIR)
+      .map(name => {
+        const fullPath = path.join(BACKUPS_DIR, name);
+        const stats    = fs.statSync(fullPath);
+        const isDir    = stats.isDirectory();
+        const sizeBytes = isDir ? dirSize(fullPath) : stats.size;
+        return { name, isDir, size: fmtSize(sizeBytes), sizeBytes, modified: fmtDate(stats.mtime), mtime: stats.mtime.getTime() };
+      })
+      .sort((a, b) => b.mtime - a.mtime);
+    res.json({ backups: entries });
+  } catch (e) {
+    res.json({ backups: [] });
+  }
+});
+
+app.get('/mgmt/container-status', adminAuth, (req, res) => {
+  execFile('docker', ['ps', '-a', '--format', '{{.Names}}|{{.State}}'], (err, stdout) => {
+    const states = {};
+    if (!err) {
+      stdout.trim().split('\n').filter(Boolean).forEach(line => {
+        const [name, state] = line.split('|');
+        states[name] = state;
+      });
+    }
+    const containers = {};
+    for (const [app_id, cfg] of Object.entries(APPS)) {
+      containers[app_id] = { name: cfg.container, state: states[cfg.container] || 'not-found' };
+    }
+    res.json({ containers });
+  });
+});
+
+app.get('/mgmt/readme', adminAuth, (req, res) => {
+  try {
+    res.type('text/plain').send(fs.readFileSync(path.join(__dirname, 'README.md'), 'utf-8'));
+  } catch (e) {
+    res.status(404).type('text/plain').send('README.md no disponible en esta imagen.');
   }
 });
 

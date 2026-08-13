@@ -1,0 +1,979 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>RMI - Admin</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f1f5f9;
+      min-height: 100vh;
+      padding: 32px 24px;
+    }
+
+    /* ── Login ── */
+    .login-wrap {
+      display: flex; align-items: center; justify-content: center;
+      min-height: 100vh; padding: 24px;
+      position: fixed; inset: 0;
+      background: #f1f5f9; z-index: 10;
+    }
+    .login-card {
+      background: #fff; border-radius: 12px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+      width: 100%; max-width: 380px; padding: 40px; text-align: center;
+    }
+    .login-card h2       { font-size: 20px; color: #0f172a; margin-bottom: 6px; }
+    .login-card h2 span  { color: #2563eb; }
+    .login-card p        { font-size: 13px; color: #64748b; margin-bottom: 24px; }
+
+    /* ── Shared ── */
+    .logo      { font-size: 20px; font-weight: 700; color: #0f172a; }
+    .logo span { color: #2563eb; }
+
+    input[type="password"] {
+      width: 100%; padding: 10px 14px;
+      border: 1.5px solid #e2e8f0; border-radius: 8px;
+      font-size: 14px; color: #1e293b; margin-bottom: 12px;
+      outline: none; transition: border-color 0.15s;
+    }
+    input[type="password"]:focus { border-color: #2563eb; }
+
+    .btn {
+      padding: 10px 20px; background: #2563eb; color: #fff;
+      border: none; border-radius: 8px; font-size: 14px; font-weight: 600;
+      cursor: pointer; transition: background 0.15s; white-space: nowrap;
+    }
+    .btn:hover          { background: #1d4ed8; }
+    .btn:disabled       { background: #93c5fd; cursor: not-allowed; }
+    .btn-full           { width: 100%; padding: 12px; font-size: 15px; }
+    .btn-sm             { padding: 7px 14px; font-size: 12px; }
+    .btn-danger         { background: #dc2626; }
+    .btn-danger:hover   { background: #b91c1c; }
+    .btn-deploy         { background: #16a34a; }
+    .btn-deploy:hover   { background: #15803d; }
+    .btn-deploy:disabled{ background: #86efac; cursor: not-allowed; }
+    .btn-ghost          { background: transparent; color: #2563eb; border: 1.5px solid #2563eb; }
+    .btn-ghost:hover    { background: #eff6ff; }
+    .btn-neutral        { background: #64748b; }
+    .btn-neutral:hover  { background: #475569; }
+    .btn-download       { background: #0369a1; }
+    .btn-download:hover { background: #075985; }
+
+    .alert             { padding: 10px 14px; border-radius: 8px; font-size: 13px; margin-bottom: 14px; }
+    .alert-error       { background: #fef2f2; border: 1px solid #fca5a5; color: #991b1b; }
+    .alert-success     { background: #f0fdf4; border: 1px solid #86efac; color: #166534; }
+
+    /* ── Main panel ── */
+    #mainPanel { display: none; max-width: 960px; margin: 0 auto; }
+
+    .top-bar {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 24px; gap: 12px; flex-wrap: wrap;
+    }
+    .top-bar-actions { display: flex; gap: 8px; }
+
+    .card { background: #fff; border-radius: 12px; box-shadow: 0 2px 12px rgba(0,0,0,0.07); overflow: hidden; }
+
+    .card-header {
+      padding: 18px 22px; border-bottom: 1px solid #f1f5f9;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    .card-title    { font-size: 15px; font-weight: 700; color: #0f172a; }
+    .card-subtitle { font-size: 12px; color: #94a3b8; margin-top: 2px; }
+
+    table { width: 100%; border-collapse: collapse; }
+    thead th {
+      padding: 10px 20px; text-align: left; font-size: 11px; font-weight: 700;
+      color: #94a3b8; text-transform: uppercase; letter-spacing: 0.05em;
+      background: #f8fafc; border-bottom: 1px solid #f1f5f9;
+    }
+    tbody tr { border-bottom: 1px solid #f8fafc; transition: background 0.1s; }
+    tbody tr:last-child { border-bottom: none; }
+    tbody tr:hover { background: #f8fafc; }
+    tbody td { padding: 12px 20px; font-size: 13px; color: #374151; vertical-align: middle; }
+
+    .file-name {
+      font-weight: 600; color: #0f172a;
+      font-family: 'SF Mono','Fira Code',monospace; font-size: 12px;
+    }
+
+    .badge       { display: inline-block; padding: 2px 8px; border-radius: 99px; font-size: 11px; font-weight: 600; margin-left: 4px; }
+    .badge-blue  { background: #dbeafe; color: #1d4ed8; }
+    .badge-green { background: #dcfce7; color: #15803d; }
+    .badge-amber { background: #fef9c3; color: #92400e; }
+    .badge-gray  { background: #f1f5f9; color: #475569; }
+    .badge-dir   { background: #f0fdf4; color: #15803d; }
+    .badge-red   { background: #fee2e2; color: #b91c1c; }
+
+    .container-status { display: flex; flex-wrap: wrap; gap: 10px; padding: 16px 20px; }
+    .container-pill {
+      display: flex; align-items: center; gap: 8px;
+      padding: 8px 14px; border-radius: 10px; background: #f8fafc;
+      font-size: 13px; font-weight: 600; color: #334155;
+    }
+    .container-pill .dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; }
+    .container-pill .dot.running    { background: #22c55e; }
+    .container-pill .dot.exited     { background: #f59e0b; }
+    .container-pill .dot.not-found  { background: #ef4444; }
+    .container-pill .sub { font-weight: 400; color: #94a3b8; font-size: 12px; }
+
+    .actions-cell { display: flex; gap: 6px; justify-content: flex-end; align-items: center; }
+
+    .empty      { padding: 48px 24px; text-align: center; color: #94a3b8; font-size: 14px; }
+    .loader-cell{ padding: 48px; text-align: center; color: #94a3b8; font-size: 13px; }
+
+    .spinner {
+      display: inline-block; width: 18px; height: 18px;
+      border: 2px solid #e2e8f0; border-top-color: #2563eb;
+      border-radius: 50%; animation: spin 0.6s linear infinite;
+      vertical-align: middle; margin-right: 6px;
+    }
+    .spinner-sm {
+      display: inline-block; width: 12px; height: 12px;
+      border: 2px solid rgba(255,255,255,0.4); border-top-color: #fff;
+      border-radius: 50%; animation: spin 0.6s linear infinite;
+      vertical-align: middle; margin-right: 4px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── Overlay ── */
+    .overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.45); display: none; align-items: center; justify-content: center; z-index: 50; padding: 24px; }
+    .overlay.open { display: flex; }
+
+    /* ── Docs ── */
+    .docs-box {
+      background: #fff; border-radius: 12px; padding: 0;
+      max-width: 780px; width: 100%; max-height: 86vh;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.18);
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    .docs-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 18px 24px; border-bottom: 1px solid #e2e8f0; flex-shrink: 0;
+    }
+    .docs-header h3 { font-size: 16px; color: #0f172a; }
+    .docs-content { padding: 24px 28px; overflow-y: auto; font-size: 14px; line-height: 1.65; color: #1e293b; }
+    .docs-content h1 { font-size: 22px; margin: 0 0 14px; color: #0f172a; }
+    .docs-content h2 { font-size: 17px; margin: 26px 0 10px; color: #0f172a; border-top: 1px solid #f1f5f9; padding-top: 18px; }
+    .docs-content h2:first-child { border-top: none; padding-top: 0; }
+    .docs-content h3 { font-size: 14px; margin: 18px 0 8px; color: #0f172a; }
+    .docs-content p, .docs-content ul { margin: 0 0 12px; }
+    .docs-content ul { padding-left: 20px; }
+    .docs-content li { margin: 3px 0; }
+    .docs-content code {
+      font-family: 'SF Mono','Fira Code',monospace; font-size: 12.5px;
+      background: #f1f5f9; color: #be123c; padding: 1px 5px; border-radius: 4px;
+    }
+    .docs-content pre {
+      background: #0f172a; color: #e2e8f0; padding: 14px 16px; border-radius: 8px;
+      overflow-x: auto; margin: 0 0 14px; font-size: 12.5px; line-height: 1.55;
+    }
+    .docs-content pre code { background: none; color: inherit; padding: 0; }
+    .docs-content table { width: 100%; border-collapse: collapse; margin: 0 0 16px; font-size: 13px; }
+    .docs-content th, .docs-content td { text-align: left; padding: 6px 10px; border: 1px solid #e2e8f0; }
+    .docs-content th { background: #f8fafc; }
+    .docs-content a { color: #2563eb; }
+    .docs-content strong { color: #0f172a; }
+    .docs-loading { padding: 48px; text-align: center; color: #94a3b8; font-size: 13px; }
+
+    /* ── Confirm delete ── */
+    .confirm-box {
+      background: #fff; border-radius: 12px; padding: 28px 32px;
+      max-width: 360px; width: 100%; box-shadow: 0 8px 40px rgba(0,0,0,0.18);
+    }
+    .confirm-box h3        { font-size: 16px; color: #0f172a; margin-bottom: 8px; }
+    .confirm-box p         { font-size: 13px; color: #64748b; margin-bottom: 22px; line-height: 1.6; }
+    .confirm-box p strong  { color: #0f172a; word-break: break-all; }
+    .confirm-actions       { display: flex; gap: 10px; justify-content: flex-end; }
+
+    /* ── Deploy modal ── */
+    .deploy-box {
+      background: #fff; border-radius: 12px; padding: 28px 32px;
+      max-width: 540px; width: 100%; box-shadow: 0 8px 40px rgba(0,0,0,0.18);
+    }
+    .deploy-box h3 { font-size: 16px; color: #0f172a; margin-bottom: 6px; }
+    .deploy-box .deploy-meta { font-size: 13px; color: #64748b; margin-bottom: 18px; line-height: 1.6; }
+    .deploy-box .deploy-meta strong { color: #0f172a; }
+
+    .deploy-warn {
+      padding: 10px 14px; background: #fef9c3; border-left: 3px solid #ca8a04;
+      border-radius: 6px; font-size: 12px; color: #854d0e; margin-bottom: 18px;
+    }
+    .deploy-warn.prod { background: #fef2f2; border-color: #dc2626; color: #991b1b; }
+
+    .deploy-email-row { margin-bottom: 18px; }
+    .deploy-email-row label { display: block; font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+    .deploy-email-row input {
+      width: 100%; padding: 9px 12px; border: 1.5px solid #e2e8f0; border-radius: 7px;
+      font-size: 13px; color: #1e293b; outline: none; transition: border-color 0.15s;
+    }
+    .deploy-email-row input:focus { border-color: #2563eb; }
+
+    .deploy-log {
+      background: #0f172a; color: #94a3b8; border-radius: 8px; padding: 14px;
+      font-family: 'SF Mono','Fira Code',monospace; font-size: 11px; line-height: 1.7;
+      max-height: 200px; overflow-y: auto; margin-bottom: 18px; display: none;
+      white-space: pre-wrap; word-break: break-all;
+    }
+    .deploy-log.visible { display: block; }
+    .deploy-log .log-ok    { color: #4ade80; }
+    .deploy-log .log-error { color: #f87171; }
+
+    .deploy-actions { display: flex; gap: 10px; justify-content: flex-end; }
+
+    .made-by { position: fixed; bottom: 16px; right: 20px; font-size: 11px; color: #94a3b8; }
+    .made-by a { color: #2563eb; text-decoration: none; font-weight: 600; }
+
+    /* ── Upload modal ── */
+    .upload-box {
+      background: #fff; border-radius: 12px; padding: 28px 32px;
+      max-width: 460px; width: 100%; box-shadow: 0 8px 40px rgba(0,0,0,0.18);
+    }
+    .upload-box h3 { font-size: 16px; color: #0f172a; margin-bottom: 16px; }
+
+    .drop-zone {
+      border: 2px dashed #cbd5e1; border-radius: 10px; padding: 28px 20px;
+      text-align: center; cursor: pointer; transition: border-color 0.15s, background 0.15s;
+      margin-bottom: 14px; position: relative;
+    }
+    .drop-zone:hover, .drop-zone.drag-over { border-color: #2563eb; background: #eff6ff; }
+    .drop-zone input[type="file"] { position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; }
+    .drop-zone-icon { font-size: 28px; margin-bottom: 8px; }
+    .drop-zone-text { font-size: 13px; color: #64748b; }
+    .drop-zone-text strong { color: #2563eb; }
+
+    .selected-files { margin-bottom: 14px; }
+    .selected-files ul { list-style: none; font-size: 12px; color: #374151; font-family: 'SF Mono','Fira Code',monospace; max-height: 120px; overflow-y: auto; }
+    .selected-files ul li { padding: 3px 0; border-bottom: 1px solid #f1f5f9; }
+    .selected-files ul li:last-child { border-bottom: none; }
+
+    .upload-progress { height: 4px; background: #e2e8f0; border-radius: 2px; overflow: hidden; margin-bottom: 14px; display: none; }
+    .upload-progress-bar { height: 100%; background: #2563eb; width: 0%; transition: width 0.2s; }
+
+    .upload-actions { display: flex; gap: 10px; justify-content: flex-end; }
+    .btn-upload { background: #0369a1; }
+    .btn-upload:hover { background: #075985; }
+    .btn-upload:disabled { background: #7dd3fc; cursor: not-allowed; }
+  </style>
+</head>
+<body>
+
+  <!-- Login -->
+  <div class="login-wrap" id="loginWrap">
+    <div class="login-card">
+      <h2>RMI <span>Admin</span></h2>
+      <p>Ingresá la contraseña de administrador</p>
+      <div id="loginAlert" style="display:none"></div>
+      <input type="password" id="adminPass" placeholder="Contraseña admin" autocomplete="current-password">
+      <button class="btn btn-full" onclick="doLogin()">Entrar</button>
+    </div>
+  </div>
+
+  <!-- Main -->
+  <div id="mainPanel">
+    <div id="mainAlert" style="display:none"></div>
+
+    <div class="top-bar">
+      <div class="logo">RMI <span>Admin</span></div>
+      <div class="top-bar-actions">
+        <a href="/" class="btn btn-ghost btn-sm">Uploader</a>
+        <button class="btn btn-ghost btn-sm" onclick="openDocs()">Docs</button>
+        <button class="btn btn-upload btn-sm" onclick="openUpload()">Subir archivo</button>
+        <button class="btn btn-sm" onclick="loadFiles()">Actualizar</button>
+        <button class="btn btn-neutral btn-sm" onclick="logout()">Salir</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Estado de contenedores</div>
+        </div>
+      </div>
+      <div id="containerStatus" class="container-status">
+        <span class="spinner"></span> Cargando...
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Uploads en /tmp/rmi</div>
+          <div class="card-subtitle" id="fileCount">Cargando...</div>
+        </div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Nombre / Aplicacion</th>
+            <th>Ambiente</th>
+            <th>Tamaño</th>
+            <th>Fecha</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="fileTable">
+          <tr><td colspan="5" class="loader-cell"><span class="spinner"></span>Cargando...</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <div>
+          <div class="card-title">Backups</div>
+          <div class="card-subtitle" id="backupCount">Cargando...</div>
+        </div>
+      </div>
+      <table>
+        <thead>
+          <tr>
+            <th>Nombre / Aplicacion</th>
+            <th>Ambiente</th>
+            <th>Tamaño</th>
+            <th>Fecha</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="backupTable">
+          <tr><td colspan="5" class="loader-cell"><span class="spinner"></span>Cargando...</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Upload modal -->
+  <div class="overlay" id="uploadOverlay">
+    <div class="upload-box">
+      <h3>Subir archivos a /tmp/rmi</h3>
+      <div class="drop-zone" id="dropZone">
+        <input type="file" id="uploadInput" multiple onchange="onFilesSelected()">
+        <div class="drop-zone-icon">&#128193;</div>
+        <div class="drop-zone-text"><strong>Elegir archivos</strong> o arrastrar aqui</div>
+      </div>
+      <div class="selected-files" id="selectedFiles" style="display:none">
+        <ul id="selectedFileList"></ul>
+      </div>
+      <div class="upload-progress" id="uploadProgress">
+        <div class="upload-progress-bar" id="uploadProgressBar"></div>
+      </div>
+      <div id="uploadAlert" style="display:none"></div>
+      <div class="upload-actions">
+        <button class="btn btn-ghost btn-sm" onclick="closeUpload()">Cancelar</button>
+        <button class="btn btn-upload btn-sm" id="uploadBtn" onclick="doAdminUpload()" disabled>Subir</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Confirm delete -->
+  <div class="overlay" id="confirmOverlay">
+    <div class="confirm-box">
+      <h3>Eliminar</h3>
+      <p>Esta accion es permanente.<br><strong id="confirmFileName"></strong></p>
+      <div class="confirm-actions">
+        <button class="btn btn-ghost btn-sm" onclick="closeConfirm()">Cancelar</button>
+        <button class="btn btn-danger btn-sm" onclick="confirmDelete()">Eliminar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Docs modal -->
+  <div class="overlay" id="docsOverlay">
+    <div class="docs-box">
+      <div class="docs-header">
+        <h3>Documentacion</h3>
+        <button class="btn btn-ghost btn-sm" onclick="closeDocs()">Cerrar</button>
+      </div>
+      <div class="docs-content" id="docsContent">
+        <div class="docs-loading"><span class="spinner"></span> Cargando...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Deploy / Restore modal -->
+  <div class="overlay" id="deployOverlay">
+    <div class="deploy-box">
+      <h3 id="deployTitle">Aplicar deploy</h3>
+      <div class="deploy-meta" id="deployMeta"></div>
+      <div class="deploy-warn" id="deployWarn"></div>
+      <div class="deploy-email-row">
+        <label>Email de notificacion (opcional)</label>
+        <input type="email" id="deployEmail" placeholder="usuario@empresa.com">
+      </div>
+      <div class="deploy-log" id="deployLog"></div>
+      <div class="deploy-actions">
+        <button class="btn btn-ghost btn-sm" id="deployCancelBtn" onclick="closeDeploy()">Cancelar</button>
+        <button class="btn btn-deploy btn-sm" id="deployConfirmBtn" onclick="confirmDeploy()">Aplicar deploy</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="made-by">made by <a href="#" tabindex="-1">Cenas-Support</a></div>
+
+  <script>
+    let adminPassword = '';
+    let pendingDelete = null;
+    let pendingDeploy = null;
+    let pendingMode   = 'deploy'; // 'deploy' | 'restore'
+
+    const APP_CONFIGS = {
+      gestion_prod:      { label: 'Gestion RMI',     env: 'Produccion', badgeClass: 'badge-blue'  },
+      gestion_test:      { label: 'Gestion RMI',     env: 'Testing',    badgeClass: 'badge-amber' },
+      contabilidad_prod: { label: 'Contabilidad RMI', env: 'Produccion', badgeClass: 'badge-green' }
+    };
+
+    document.getElementById('adminPass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
+
+    function doLogin() {
+      const pass = document.getElementById('adminPass').value.trim();
+      if (!pass) return;
+      adminPassword = pass;
+      loadFiles(true);
+    }
+
+    function logout() {
+      adminPassword = '';
+      document.getElementById('mainPanel').style.display  = 'none';
+      document.getElementById('loginWrap').style.display  = 'flex';
+      document.getElementById('adminPass').value = '';
+    }
+
+    async function loadFiles(fromLogin = false) {
+      try {
+        const res = await fetch('/mgmt/files', { headers: { 'x-admin-password': adminPassword } });
+        if (res.status === 401) {
+          if (fromLogin) showLoginAlert('Contraseña incorrecta');
+          return;
+        }
+        if (!res.ok) {
+          const text = await res.text();
+          throw new Error(`HTTP ${res.status}`);
+        }
+        const data = await res.json();
+        if (fromLogin) {
+          document.getElementById('loginWrap').style.display = 'none';
+          document.getElementById('mainPanel').style.display = 'block';
+        }
+        renderFiles(data.files || []);
+        loadContainerStatus();
+        loadBackups();
+      } catch (e) {
+        if (fromLogin) showLoginAlert('Error de conexion: ' + e.message);
+        else showMainAlert('error', 'Error al cargar: ' + e.message);
+      }
+    }
+
+    async function loadContainerStatus() {
+      const box = document.getElementById('containerStatus');
+      try {
+        const res = await fetch('/mgmt/container-status', { headers: { 'x-admin-password': adminPassword } });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        const stateLabel = { running: 'corriendo', exited: 'detenido', 'not-found': 'no existe' };
+        box.innerHTML = Object.entries(data.containers || {}).map(([app_id, c]) => {
+          const info  = APP_CONFIGS[app_id];
+          const state = stateLabel[c.state] || c.state;
+          return `<div class="container-pill">
+            <span class="dot ${esc(c.state)}"></span>
+            ${esc(info ? info.label + (info.env === 'Testing' ? ' (Testing)' : '') : app_id)}
+            <span class="sub">${esc(c.name)} · ${esc(state)}</span>
+          </div>`;
+        }).join('');
+      } catch (e) {
+        box.innerHTML = `<span style="color:#ef4444;font-size:13px">Error al cargar estado: ${esc(e.message)}</span>`;
+      }
+    }
+
+    async function loadBackups() {
+      try {
+        const res = await fetch('/mgmt/backups', { headers: { 'x-admin-password': adminPassword } });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        renderBackups(data.backups || []);
+      } catch (e) {
+        document.getElementById('backupTable').innerHTML =
+          `<tr><td colspan="5" class="empty">Error al cargar backups: ${esc(e.message)}</td></tr>`;
+      }
+    }
+
+    function renderBackups(backups) {
+      const tbody = document.getElementById('backupTable');
+      document.getElementById('backupCount').textContent =
+        backups.length === 0 ? 'Sin backups' : `${backups.length} backup${backups.length !== 1 ? 's' : ''}`;
+
+      if (backups.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty">Todavia no se hizo ningun deploy</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = backups.map(f => {
+        const info = parseEntry(f.name);
+        const appCell = info
+          ? `<span class="badge ${info.badgeClass}">${esc(info.label)}</span>`
+          : '<span class="badge badge-gray">desconocido</span>';
+        const envCell = info
+          ? `<span class="badge ${info.env === 'Testing' ? 'badge-amber' : 'badge-green'}">${esc(info.env)}</span>`
+          : '—';
+
+        return `<tr>
+          <td>
+            <span class="file-name">${esc(f.name)}</span>
+            ${appCell}
+          </td>
+          <td>${envCell}</td>
+          <td>${esc(f.size)}</td>
+          <td>${esc(f.modified)}</td>
+          <td>
+            <div class="actions-cell">
+              ${info ? `<button class="btn btn-deploy btn-sm" onclick="askRestore('${escAttr(f.name)}')">Restaurar</button>` : ''}
+            </div>
+          </td>
+        </tr>`;
+      }).join('');
+    }
+
+    function parseEntry(name) {
+      for (const [app_id, cfg] of Object.entries(APP_CONFIGS)) {
+        if (name.startsWith(app_id + '_')) return { app_id, ...cfg };
+      }
+      return null;
+    }
+
+    function renderFiles(files) {
+      const tbody = document.getElementById('fileTable');
+      document.getElementById('fileCount').textContent =
+        files.length === 0 ? 'Sin uploads' : `${files.length} entrada${files.length !== 1 ? 's' : ''}`;
+
+      if (files.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty">No hay uploads en /tmp/rmi</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = files.map(f => {
+        const info = parseEntry(f.name);
+        const appCell = info
+          ? `<span class="badge ${info.badgeClass}">${esc(info.label)}</span>`
+          : '<span class="badge badge-gray">desconocido</span>';
+        const envCell = info
+          ? `<span class="badge ${info.env === 'Testing' ? 'badge-amber' : 'badge-green'}">${esc(info.env)}</span>`
+          : '—';
+        const canDeploy = info && f.isDir;
+
+        return `<tr>
+          <td>
+            <span class="file-name">${esc(f.name)}</span>
+            ${appCell}
+          </td>
+          <td>${envCell}</td>
+          <td>${esc(f.size)}</td>
+          <td>${esc(f.modified)}</td>
+          <td>
+            <div class="actions-cell">
+              ${canDeploy
+                ? `<button class="btn btn-deploy btn-sm" id="deployBtn_${escAttr(f.name)}" onclick="askDeploy('${escAttr(f.name)}')">Deploy</button>`
+                : ''}
+              <button class="btn btn-download btn-sm" onclick="downloadFile('${escAttr(f.name)}')">Descargar</button>
+              <button class="btn btn-danger btn-sm" onclick="askDelete('${escAttr(f.name)}')">Eliminar</button>
+            </div>
+          </td>
+        </tr>`;
+      }).join('');
+    }
+
+    // ── Download ──────────────────────────────────────────────────────────────
+
+    function downloadFile(name) {
+      fetch(`/mgmt/download/${encodeURIComponent(name)}`, {
+        headers: { 'x-admin-password': adminPassword }
+      })
+        .then(res => {
+          if (!res.ok) { showMainAlert('error', 'Error al descargar'); return null; }
+          return res.blob();
+        })
+        .then(blob => {
+          if (!blob) return;
+          const url  = URL.createObjectURL(blob);
+          const link = document.createElement('a');
+          link.href     = url;
+          link.download = name;
+          document.body.appendChild(link);
+          link.click();
+          link.remove();
+          URL.revokeObjectURL(url);
+        })
+        .catch(e => showMainAlert('error', 'Error: ' + e.message));
+    }
+
+    // ── Delete ────────────────────────────────────────────────────────────────
+
+    function askDelete(name) {
+      pendingDelete = name;
+      document.getElementById('confirmFileName').textContent = name;
+      document.getElementById('confirmOverlay').classList.add('open');
+    }
+
+    function closeConfirm() {
+      pendingDelete = null;
+      document.getElementById('confirmOverlay').classList.remove('open');
+    }
+
+    async function confirmDelete() {
+      if (!pendingDelete) return;
+      const name = pendingDelete;
+      closeConfirm();
+      try {
+        const res  = await fetch('/mgmt/delete', {
+          method: 'POST',
+          headers: { 'x-admin-password': adminPassword, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name })
+        });
+        const data = await res.json();
+        if (res.ok && data.ok) { showMainAlert('success', `Eliminado: ${name}`); loadFiles(); }
+        else showMainAlert('error', data.error || 'Error al eliminar');
+      } catch (e) {
+        showMainAlert('error', 'Error de conexion: ' + e.message);
+      }
+    }
+
+    // ── Deploy ────────────────────────────────────────────────────────────────
+
+    function askDeploy(name) { openDeployModal(name, 'deploy'); }
+    function askRestore(name) { openDeployModal(name, 'restore'); }
+
+    function openDeployModal(name, mode) {
+      const info = parseEntry(name);
+      if (!info) return;
+      pendingDeploy = name;
+      pendingMode   = mode;
+
+      const isRestore = mode === 'restore';
+      document.getElementById('deployTitle').textContent = isRestore ? 'Restaurar backup' : 'Aplicar deploy';
+
+      const meta = document.getElementById('deployMeta');
+      meta.innerHTML = `
+        Aplicacion: <strong>${esc(info.label)}</strong><br>
+        Ambiente: <strong>${esc(info.env)}</strong><br>
+        ${isRestore ? 'Backup' : 'Upload'}: <strong>${esc(name)}</strong>
+      `;
+
+      const warn = document.getElementById('deployWarn');
+      const target = info.env === 'Produccion' ? 'PRODUCCION' : 'TESTING';
+      warn.className = info.env === 'Produccion' ? 'deploy-warn prod' : 'deploy-warn';
+      warn.textContent = isRestore
+        ? `Esto va a sobreescribir ${target} con este backup y reiniciara el contenedor (se guarda un backup del estado actual antes de restaurar).`
+        : `Esto actualizara el sistema en ${target} y reiniciara el contenedor.`;
+
+      document.getElementById('deployLog').className = 'deploy-log';
+      document.getElementById('deployLog').innerHTML = '';
+      document.getElementById('deployEmail').value = '';
+      document.getElementById('deployConfirmBtn').disabled = false;
+      document.getElementById('deployConfirmBtn').textContent = isRestore ? 'Restaurar' : 'Aplicar deploy';
+      document.getElementById('deployCancelBtn').textContent = 'Cancelar';
+
+      document.getElementById('deployOverlay').classList.add('open');
+    }
+
+    function closeDeploy() {
+      pendingDeploy = null;
+      document.getElementById('deployOverlay').classList.remove('open');
+    }
+
+    async function confirmDeploy() {
+      if (!pendingDeploy) return;
+      const name      = pendingDeploy;
+      const isRestore = pendingMode === 'restore';
+      const email     = document.getElementById('deployEmail').value.trim();
+
+      const btn   = document.getElementById('deployConfirmBtn');
+      const logEl = document.getElementById('deployLog');
+      btn.disabled = true;
+      btn.innerHTML = `<span class="spinner-sm"></span>Ejecutando...`;
+      logEl.className  = 'deploy-log visible';
+      logEl.textContent = isRestore ? 'Iniciando restauracion...\n' : 'Iniciando deploy...\n';
+      document.getElementById('deployCancelBtn').textContent = 'Cerrar';
+
+      try {
+        const res = await fetch(isRestore ? '/mgmt/restore' : '/mgmt/deploy', {
+          method: 'POST',
+          headers: { 'x-admin-password': adminPassword, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, email: email || undefined })
+        });
+
+        const reader  = res.body.getReader();
+        const decoder = new TextDecoder();
+        let   buffer  = '';
+        let   finalStatus = null;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+
+          const parts = buffer.split('\n\n');
+          buffer = parts.pop();
+
+          for (const part of parts) {
+            if (!part.trim()) continue;
+            let event = 'log';
+            let data  = '';
+            for (const line of part.split('\n')) {
+              if (line.startsWith('event: ')) event = line.slice(7).trim();
+              if (line.startsWith('data: '))  data  = line.slice(6).trim();
+            }
+            if (!data) continue;
+            const parsed = JSON.parse(data);
+            if (event === 'log') {
+              logEl.textContent += parsed;
+              logEl.scrollTop = logEl.scrollHeight;
+            } else if (event === 'done') {
+              finalStatus = parsed;
+            }
+          }
+        }
+
+        if (finalStatus?.ok) {
+          logEl.textContent += isRestore ? '\n✓ Restauracion completada exitosamente.' : '\n✓ Deploy completado exitosamente.';
+          logEl.scrollTop = logEl.scrollHeight;
+          btn.textContent = isRestore ? 'Restaurado' : 'Deploy aplicado';
+          showMainAlert('success', isRestore ? `Backup restaurado: ${name}` : `Deploy aplicado: ${name}`);
+          loadFiles();
+        } else {
+          logEl.textContent += `\n✗ Error (codigo ${finalStatus?.code ?? '?'})`;
+          logEl.scrollTop = logEl.scrollHeight;
+          btn.disabled = false;
+          btn.textContent = 'Reintentar';
+        }
+      } catch (e) {
+        logEl.textContent += `\nError de conexion: ${e.message}`;
+        logEl.scrollTop = logEl.scrollHeight;
+        btn.disabled = false;
+        btn.textContent = 'Reintentar';
+      }
+    }
+
+    // ── Docs ──────────────────────────────────────────────────────────────────
+
+    async function openDocs() {
+      document.getElementById('docsOverlay').classList.add('open');
+      const box = document.getElementById('docsContent');
+      box.innerHTML = '<div class="docs-loading"><span class="spinner"></span> Cargando...</div>';
+      try {
+        const res = await fetch('/mgmt/readme', { headers: { 'x-admin-password': adminPassword } });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const md = await res.text();
+        box.innerHTML = renderMarkdown(md);
+      } catch (e) {
+        box.innerHTML = `<p style="color:#ef4444">Error al cargar documentacion: ${esc(e.message)}</p>`;
+      }
+    }
+
+    function closeDocs() {
+      document.getElementById('docsOverlay').classList.remove('open');
+    }
+
+    function escMd(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+    function inlineMd(text) {
+      text = escMd(text);
+      text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
+      text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+      text = text.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+      return text;
+    }
+
+    // Renderer minimo de markdown (headers, code fences, tablas, listas,
+    // negrita, links) - alcanza para los README de este repo, no es de
+    // proposito general.
+    function renderMarkdown(md) {
+      const lines = md.replace(/\r\n/g, '\n').split('\n');
+      let html = '';
+      let inList = false;
+      let i = 0;
+
+      const closeList = () => { if (inList) { html += '</ul>'; inList = false; } };
+
+      while (i < lines.length) {
+        const line = lines[i];
+
+        if (/^```/.test(line)) {
+          closeList();
+          const codeLines = [];
+          i++;
+          while (i < lines.length && !/^```/.test(lines[i])) { codeLines.push(lines[i]); i++; }
+          i++;
+          html += `<pre><code>${escMd(codeLines.join('\n'))}</code></pre>`;
+          continue;
+        }
+
+        if (/^\|/.test(line) && i + 1 < lines.length && /^\|?[\s:|-]+\|/.test(lines[i + 1])) {
+          closeList();
+          const splitRow = row => row.split('|').map(c => c.trim()).filter((c, idx, arr) => !(idx === 0 && c === '') && !(idx === arr.length - 1 && c === ''));
+          const headerCells = splitRow(line);
+          i += 2;
+          const rows = [];
+          while (i < lines.length && /^\|/.test(lines[i])) { rows.push(splitRow(lines[i])); i++; }
+          html += '<table><thead><tr>' + headerCells.map(c => `<th>${inlineMd(c)}</th>`).join('') + '</tr></thead><tbody>';
+          rows.forEach(r => { html += '<tr>' + r.map(c => `<td>${inlineMd(c)}</td>`).join('') + '</tr>'; });
+          html += '</tbody></table>';
+          continue;
+        }
+
+        let m;
+        if ((m = /^(#{1,3})\s+(.*)$/.exec(line))) {
+          closeList();
+          const level = m[1].length;
+          html += `<h${level}>${inlineMd(m[2])}</h${level}>`;
+          i++;
+          continue;
+        }
+
+        if (/^-{3,}\s*$/.test(line.trim())) { closeList(); i++; continue; }
+
+        if (/^[-*]\s+/.test(line)) {
+          if (!inList) { html += '<ul>'; inList = true; }
+          html += `<li>${inlineMd(line.replace(/^[-*]\s+/, ''))}</li>`;
+          i++;
+          continue;
+        }
+
+        if (line.trim() === '') { closeList(); i++; continue; }
+
+        closeList();
+        const paraLines = [line];
+        i++;
+        while (i < lines.length && lines[i].trim() !== '' && !/^(#{1,3})\s|^```|^\||^[-*]\s/.test(lines[i])) {
+          paraLines.push(lines[i]);
+          i++;
+        }
+        html += `<p>${inlineMd(paraLines.join(' '))}</p>`;
+      }
+      closeList();
+      return html;
+    }
+
+    // ── Admin upload ──────────────────────────────────────────────────────────
+
+    function openUpload() {
+      document.getElementById('uploadInput').value = '';
+      document.getElementById('selectedFiles').style.display = 'none';
+      document.getElementById('selectedFileList').innerHTML = '';
+      document.getElementById('uploadProgress').style.display = 'none';
+      document.getElementById('uploadProgressBar').style.width = '0%';
+      document.getElementById('uploadAlert').style.display = 'none';
+      document.getElementById('uploadBtn').disabled = true;
+      document.getElementById('uploadBtn').textContent = 'Subir';
+      document.getElementById('uploadOverlay').classList.add('open');
+    }
+
+    function closeUpload() {
+      document.getElementById('uploadOverlay').classList.remove('open');
+    }
+
+    function onFilesSelected() {
+      const files = document.getElementById('uploadInput').files;
+      const list  = document.getElementById('selectedFileList');
+      list.innerHTML = Array.from(files).map(f => `<li>${esc(f.name)} <span style="color:#94a3b8">(${fmtBytes(f.size)})</span></li>`).join('');
+      document.getElementById('selectedFiles').style.display = files.length ? 'block' : 'none';
+      document.getElementById('uploadBtn').disabled = files.length === 0;
+    }
+
+    function fmtBytes(b) {
+      if (b < 1024)        return b + ' B';
+      if (b < 1048576)     return (b/1024).toFixed(1) + ' KB';
+      return (b/1048576).toFixed(2) + ' MB';
+    }
+
+    async function doAdminUpload() {
+      const input = document.getElementById('uploadInput');
+      if (!input.files.length) return;
+
+      const btn       = document.getElementById('uploadBtn');
+      const alertEl   = document.getElementById('uploadAlert');
+      const progressW = document.getElementById('uploadProgress');
+      const progressB = document.getElementById('uploadProgressBar');
+
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner-sm"></span>Subiendo...';
+      alertEl.style.display = 'none';
+      progressW.style.display = 'block';
+      progressB.style.width = '10%';
+
+      const fd = new FormData();
+      for (const f of input.files) fd.append('files', f);
+
+      try {
+        progressB.style.width = '50%';
+        const res  = await fetch('/mgmt/upload', {
+          method: 'POST',
+          headers: { 'x-admin-password': adminPassword },
+          body: fd
+        });
+        progressB.style.width = '100%';
+        const data = await res.json();
+
+        if (res.ok && data.ok) {
+          const names = data.archivos.join(', ');
+          alertEl.className = 'alert alert-success';
+          alertEl.textContent = `Subidos: ${names}`;
+          alertEl.style.display = 'block';
+          btn.textContent = 'Listo';
+          loadFiles();
+          setTimeout(closeUpload, 1800);
+        } else {
+          alertEl.className = 'alert alert-error';
+          alertEl.textContent = data.error || 'Error al subir';
+          alertEl.style.display = 'block';
+          btn.disabled = false;
+          btn.textContent = 'Reintentar';
+          progressB.style.width = '0%';
+        }
+      } catch (e) {
+        alertEl.className = 'alert alert-error';
+        alertEl.textContent = 'Error de conexion: ' + e.message;
+        alertEl.style.display = 'block';
+        btn.disabled = false;
+        btn.textContent = 'Reintentar';
+        progressB.style.width = '0%';
+      }
+    }
+
+    // drag-and-drop
+    const dz = document.getElementById('dropZone');
+    if (dz) {
+      dz.addEventListener('dragover',  e => { e.preventDefault(); dz.classList.add('drag-over'); });
+      dz.addEventListener('dragleave', () => dz.classList.remove('drag-over'));
+      dz.addEventListener('drop', e => {
+        e.preventDefault(); dz.classList.remove('drag-over');
+        const dt = e.dataTransfer;
+        if (dt && dt.files.length) {
+          document.getElementById('uploadInput').files = dt.files;
+          onFilesSelected();
+        }
+      });
+    }
+
+    // ── Alerts ────────────────────────────────────────────────────────────────
+
+    function showLoginAlert(msg) {
+      const el = document.getElementById('loginAlert');
+      el.className = 'alert alert-error'; el.textContent = msg; el.style.display = 'block';
+    }
+
+    function showMainAlert(type, msg) {
+      const el = document.getElementById('mainAlert');
+      el.className = `alert alert-${type === 'error' ? 'error' : 'success'}`;
+      el.textContent = msg; el.style.display = 'block';
+      setTimeout(() => { el.style.display = 'none'; }, 5000);
+    }
+
+    function esc(s) {
+      return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    }
+    function escAttr(s) { return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+  </script>
+</body>
+</html>
