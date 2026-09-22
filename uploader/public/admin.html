@@ -107,6 +107,7 @@
     .badge-amber { background: #fef9c3; color: #92400e; }
     .badge-gray  { background: #f1f5f9; color: #475569; }
     .badge-dir   { background: #f0fdf4; color: #15803d; }
+    .badge-purple{ background: #f3e8ff; color: #7e22ce; }
     .badge-red   { background: #fee2e2; color: #b91c1c; }
 
     .container-status { display: flex; flex-wrap: wrap; gap: 10px; padding: 16px 20px; }
@@ -421,9 +422,11 @@
     let pendingMode   = 'deploy'; // 'deploy' | 'restore'
 
     const APP_CONFIGS = {
-      gestion_prod:      { label: 'Gestion RMI',     env: 'Produccion', badgeClass: 'badge-blue'  },
-      gestion_test:      { label: 'Gestion RMI',     env: 'Testing',    badgeClass: 'badge-amber' },
-      contabilidad_prod: { label: 'Contabilidad RMI', env: 'Produccion', badgeClass: 'badge-green' }
+      gestion_prod:      { label: 'Gestion RMI',      env: 'Produccion', badgeClass: 'badge-blue'   },
+      gestion_test:      { label: 'Gestion RMI',      env: 'Testing',    badgeClass: 'badge-amber'  },
+      contabilidad_prod: { label: 'Contabilidad RMI', env: 'Produccion', badgeClass: 'badge-green'  },
+      contabilidad_test: { label: 'Contabilidad RMI', env: 'Testing',    badgeClass: 'badge-amber'  },
+      portal_web_prod:   { label: 'Portal Web',       env: 'Produccion', badgeClass: 'badge-purple' }
     };
 
     document.getElementById('adminPass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });

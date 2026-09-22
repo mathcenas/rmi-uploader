@@ -1,7 +1,7 @@
 #!/bin/bash
 # Script de actualizacion del sistema RMI
 # Uso: ./update-rmi.sh [app] [email]
-#   app   : gestion_prod | gestion_test | contabilidad_prod
+#   app   : gestion_prod | gestion_test | contabilidad_prod | contabilidad_test | portal_web_prod
 #   email : destinatario del email de confirmacion (opcional, sobreescribe .env)
 # Env vars opcionales:
 #   DEPLOY_SRC : ruta exacta al directorio de upload (lo usa el admin panel)
@@ -30,24 +30,43 @@ case "$APP" in
     APP_ENV="Produccion"
     APP_DIR="/srv/gestion-rmi/prod"
     CONTAINER="gestion-rmi"
-    CONTAINER_WORKDIR="/app"
+    VALIDATE_FILE="server.js"
+    CONTAINER_VALIDATE_PATH="/app/server.js"
     ;;
   gestion_test)
     APP_LABEL="Gestion RMI"
     APP_ENV="Testing"
     APP_DIR="/srv/gestion-rmi/testing"
     CONTAINER="gestion-rmi-testing"
-    CONTAINER_WORKDIR="/app"
+    VALIDATE_FILE="server.js"
+    CONTAINER_VALIDATE_PATH="/app/server.js"
     ;;
   contabilidad_prod)
     APP_LABEL="Contabilidad RMI"
     APP_ENV="Produccion"
-    APP_DIR="/srv/contabilidad-rmi/rmi-contabilidad"
+    APP_DIR="/srv/contabilidad-rmi/prod"
     CONTAINER="contabilidad-rmi"
-    CONTAINER_WORKDIR="/app"
+    VALIDATE_FILE="server.js"
+    CONTAINER_VALIDATE_PATH="/app/server.js"
+    ;;
+  contabilidad_test)
+    APP_LABEL="Contabilidad RMI"
+    APP_ENV="Testing"
+    APP_DIR="/srv/contabilidad-rmi/testing"
+    CONTAINER="contabilidad-rmi-testing"
+    VALIDATE_FILE="server.js"
+    CONTAINER_VALIDATE_PATH="/app/server.js"
+    ;;
+  portal_web_prod)
+    APP_LABEL="Portal Web"
+    APP_ENV="Produccion"
+    APP_DIR="/srv/rmi-web"
+    CONTAINER="rmi_consultores_apache"
+    VALIDATE_FILE="index.html"
+    CONTAINER_VALIDATE_PATH="/usr/local/apache2/htdocs/index.html"
     ;;
   *)
-    echo "ERROR: app desconocida '$APP'. Usar: gestion_prod | gestion_test | contabilidad_prod"
+    echo "ERROR: app desconocida '$APP'. Usar: gestion_prod | gestion_test | contabilidad_prod | contabilidad_test | portal_web_prod"
     exit 1
     ;;
 esac
@@ -94,7 +113,14 @@ COPIED_FILES=""
 for item in "$LATEST"/*; do
   [ -e "$item" ] || continue
   name=$(basename "$item")
-  cp -r "$item" "$APP_DIR/$name"
+  if [ -d "$item" ]; then
+    # mezclar contenido en vez de anidar: si $APP_DIR/$name ya existe,
+    # "cp -r item dest" crea dest/item en vez de fusionar
+    mkdir -p "$APP_DIR/$name"
+    cp -r "$item"/. "$APP_DIR/$name"/
+  else
+    cp -f "$item" "$APP_DIR/$name"
+  fi
   COPIED_FILES="$COPIED_FILES $name"
   echo "Copiado: $name → $APP_DIR/"
 done
@@ -103,17 +129,17 @@ done
 echo "Reiniciando contenedor $CONTAINER..."
 docker restart "$CONTAINER" 2>&1 && RESTART_OK=true || RESTART_OK=false
 
-# ── Validar que el contenedor esta sirviendo el server.js recien copiado ──────
-if [ "$RESTART_OK" = "true" ] && [ -f "$APP_DIR/server.js" ]; then
+# ── Validar que el contenedor esta sirviendo el archivo recien copiado ────────
+if [ "$RESTART_OK" = "true" ] && [ -n "$VALIDATE_FILE" ] && [ -f "$APP_DIR/$VALIDATE_FILE" ]; then
   sleep 2
-  HOST_HASH=$(md5sum "$APP_DIR/server.js" | awk '{print $1}')
-  CONTAINER_HASH=$(docker exec "$CONTAINER" md5sum "$CONTAINER_WORKDIR/server.js" 2>/dev/null | awk '{print $1}')
+  HOST_HASH=$(md5sum "$APP_DIR/$VALIDATE_FILE" | awk '{print $1}')
+  CONTAINER_HASH=$(docker exec "$CONTAINER" md5sum "$CONTAINER_VALIDATE_PATH" 2>/dev/null | awk '{print $1}')
   if [ -z "$CONTAINER_HASH" ]; then
-    echo "Validacion: no se pudo leer server.js dentro del contenedor (revisar ruta $CONTAINER_WORKDIR/server.js)."
+    echo "Validacion: no se pudo leer $VALIDATE_FILE dentro del contenedor (revisar ruta $CONTAINER_VALIDATE_PATH)."
   elif [ "$HOST_HASH" = "$CONTAINER_HASH" ]; then
-    echo "Validacion: OK — el contenedor esta sirviendo el server.js recien copiado ($HOST_HASH)."
+    echo "Validacion: OK — el contenedor esta sirviendo el $VALIDATE_FILE recien copiado ($HOST_HASH)."
   else
-    echo "Validacion: ALERTA — el server.js del contenedor NO coincide con el del host (host=$HOST_HASH, contenedor=$CONTAINER_HASH). Puede que la imagen necesite --build en vez de restart."
+    echo "Validacion: ALERTA — el $VALIDATE_FILE del contenedor NO coincide con el del host (host=$HOST_HASH, contenedor=$CONTAINER_HASH). Puede que la imagen necesite --build en vez de restart."
   fi
 fi
 

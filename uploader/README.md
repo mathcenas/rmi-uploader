@@ -22,11 +22,25 @@ deploye al servidor real, y pueda restaurar un backup si algo sale mal.
 Todo pasa por el objeto `APPS` en `server.js` y el `case` de `update-rmi.sh` —
 **tienen que estar sincronizados a mano**, no hay una única fuente de verdad:
 
-| app_id              | directorio real                          | contenedor            |
-|----------------------|-------------------------------------------|------------------------|
-| `gestion_prod`        | `/srv/gestion-rmi/prod`                  | `gestion-rmi`          |
-| `gestion_test`        | `/srv/gestion-rmi/testing`               | `gestion-rmi-testing`  |
-| `contabilidad_prod`   | `/srv/contabilidad-rmi/rmi-contabilidad` | `contabilidad-rmi`     |
+| app_id               | directorio real                       | contenedor                 |
+|-----------------------|-----------------------------------------|------------------------------|
+| `gestion_prod`         | `/srv/gestion-rmi/prod`               | `gestion-rmi`               |
+| `gestion_test`         | `/srv/gestion-rmi/testing`            | `gestion-rmi-testing`       |
+| `contabilidad_prod`    | `/srv/contabilidad-rmi/prod`          | `contabilidad-rmi`          |
+| `contabilidad_test`    | `/srv/contabilidad-rmi/testing`       | `contabilidad-rmi-testing`  |
+| `portal_web_prod`      | `/srv/rmi-web`                        | `rmi_consultores_apache`    |
+
+Portal Web es un caso distinto a las demás: no es una app Node, es un
+`httpd:alpine` sirviendo un único `index.html` bind-mounteado
+(`./index.html:/usr/local/apache2/htdocs/index.html:ro`). Por eso su archivo
+de validación es `index.html` (no `server.js`) — ver `VALIDATE_FILE` /
+`CONTAINER_VALIDATE_PATH` en `update-rmi.sh`.
+
+> `contabilidad_prod` migró de `/srv/contabilidad-rmi/rmi-contabilidad` a
+> `/srv/contabilidad-rmi/prod` para seguir la misma convención que gestión
+> (`/prod` + `/testing`). Ver la sección de migración más abajo — **esto
+> requiere mover la carpeta real en el server**, no alcanza con el cambio
+> de código.
 
 Para agregar `web_rmi` (o cualquier app nueva) hay que tocar **tres lugares**:
 
@@ -80,7 +94,7 @@ services:
       - ./logs:/app/logs
 ```
 
-**`/srv/contabilidad-rmi/rmi-contabilidad/docker-compose.yml`**:
+**`/srv/contabilidad-rmi/prod/docker-compose.yml`**:
 ```yaml
 services:
   contabilidad-rmi:
@@ -90,6 +104,46 @@ services:
     ports:
       - "3002:3000"   # ajustar al puerto real que use esta app
 ```
+
+**`/srv/contabilidad-rmi/testing/docker-compose.yml`**: ya está armado en el
+server con el mismo patrón que prod (`container_name: contabilidad-rmi-testing`).
+
+**`/srv/rmi-web/docker-compose.yml`** (Portal Web — ya existe, no es una app
+Node, es Apache sirviendo un `index.html` suelto):
+```yaml
+services:
+  web:
+    image: httpd:alpine
+    container_name: rmi_consultores_apache
+    ports:
+      - "3012:80"
+    volumes:
+      - ./index.html:/usr/local/apache2/htdocs/index.html:ro
+    restart: always
+```
+Acá el deploy solo tiene sentido con un `index.html` suelto (o dentro de un
+ZIP con `index.html` en la raíz) — no hay `server.js`/`package.json`/`public`/
+`views` que copiar.
+
+### Migrar Contabilidad RMI de `rmi-contabilidad` a `prod`
+
+Este contenedor ya está en producción, así que hay que mover la carpeta sin
+tirar el servicio abajo más de lo necesario:
+
+```bash
+cd /srv/contabilidad-rmi
+sudo docker compose -f rmi-contabilidad/docker-compose.yml down
+sudo mv rmi-contabilidad prod
+cd prod
+# editar docker-compose.yml: container_name ya deberia decir contabilidad-rmi (no cambia)
+sudo docker compose up -d --build
+```
+
+Después de esto, `update-rmi.sh` (con el path nuevo `/srv/contabilidad-rmi/prod`)
+va a encontrar todo donde corresponde. Mientras no se haga esta migración,
+un deploy de `contabilidad_prod` va a copiar archivos a una carpeta `prod/`
+que no existe todavía y el contenedor real (que sigue leyendo de
+`rmi-contabilidad/`) no va a ver los cambios.
 
 Si alguno de estos contenedores ya existe pero con otro nombre (por ejemplo
 quedó de una migración vieja, tipo `rmi-sistema1.1`), lo más simple es
@@ -156,8 +210,9 @@ que apunten al nombre real.
    - copia los archivos nuevos a `APP_DIR`,
    - hace `docker restart <container>`,
    - **valida** que el restart haya funcionado: compara el hash MD5 del
-     `server.js` recien copiado en el host contra el que el contenedor
-     tiene adentro (`docker exec <container> md5sum <CONTAINER_WORKDIR>/server.js`).
+     `VALIDATE_FILE` (`server.js` para las apps Node, `index.html` para
+     Portal Web) recién copiado en el host contra el que el contenedor
+     tiene adentro en `CONTAINER_VALIDATE_PATH`.
 4. El log se ve en vivo en el panel (SSE), incluida la linea de validacion.
    Si `docker restart` falla porque el contenedor no existe todavía, los
    archivos igual quedan copiados — solo falta levantar el contenedor a mano

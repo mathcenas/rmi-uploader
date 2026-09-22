@@ -16,9 +16,11 @@ const RESEND_API_KEY  = process.env.RESEND_API_KEY  || '';
 const RESEND_FROM     = process.env.RESEND_FROM     || 'RMI Uploader <noreply@cenas.com.uy>';
 
 const APPS = {
-  gestion_prod:      { label: 'Gestion RMI',      env: 'Produccion', dir: '/srv/gestion-rmi/prod',                  container: 'gestion-rmi' },
-  gestion_test:      { label: 'Gestion RMI',      env: 'Testing',    dir: '/srv/gestion-rmi/testing',               container: 'gestion-rmi-testing' },
-  contabilidad_prod: { label: 'Contabilidad RMI', env: 'Produccion', dir: '/srv/contabilidad-rmi/rmi-contabilidad', container: 'contabilidad-rmi' },
+  gestion_prod:      { label: 'Gestion RMI',      env: 'Produccion', dir: '/srv/gestion-rmi/prod',        container: 'gestion-rmi' },
+  gestion_test:      { label: 'Gestion RMI',      env: 'Testing',    dir: '/srv/gestion-rmi/testing',     container: 'gestion-rmi-testing' },
+  contabilidad_prod: { label: 'Contabilidad RMI', env: 'Produccion', dir: '/srv/contabilidad-rmi/prod',   container: 'contabilidad-rmi' },
+  contabilidad_test: { label: 'Contabilidad RMI', env: 'Testing',    dir: '/srv/contabilidad-rmi/testing',container: 'contabilidad-rmi-testing' },
+  portal_web_prod:   { label: 'Portal Web',       env: 'Produccion', dir: '/srv/rmi-web',                  container: 'rmi_consultores_apache' },
 };
 
 const ALLOWED_FILES = new Set(['server.js', 'package.json', 'index.html']);
@@ -45,8 +47,10 @@ function tsDir() {
 
 function sendResend(to, subject, html) {
   if (!RESEND_API_KEY) { console.log('[resend] sin API key, email omitido'); return; }
-  console.log(`[resend] enviando a ${to} — "${subject}"`);
-  const body = JSON.stringify({ from: RESEND_FROM, to: [to], subject, html });
+  const recipients = String(to).split(',').map(s => s.trim()).filter(Boolean);
+  if (recipients.length === 0) { console.log('[resend] destinatario vacio, email omitido'); return; }
+  console.log(`[resend] enviando a ${recipients.join(', ')} — "${subject}"`);
+  const body = JSON.stringify({ from: RESEND_FROM, to: recipients, subject, html });
   const req  = https.request(
     { hostname: 'api.resend.com', path: '/emails', method: 'POST',
       headers: { 'Authorization': `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } },
