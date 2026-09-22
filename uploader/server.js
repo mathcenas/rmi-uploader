@@ -47,8 +47,10 @@ function tsDir() {
 
 function sendResend(to, subject, html) {
   if (!RESEND_API_KEY) { console.log('[resend] sin API key, email omitido'); return; }
-  console.log(`[resend] enviando a ${to} — "${subject}"`);
-  const body = JSON.stringify({ from: RESEND_FROM, to: [to], subject, html });
+  const recipients = String(to).split(',').map(s => s.trim()).filter(Boolean);
+  if (recipients.length === 0) { console.log('[resend] destinatario vacio, email omitido'); return; }
+  console.log(`[resend] enviando a ${recipients.join(', ')} — "${subject}"`);
+  const body = JSON.stringify({ from: RESEND_FROM, to: recipients, subject, html });
   const req  = https.request(
     { hostname: 'api.resend.com', path: '/emails', method: 'POST',
       headers: { 'Authorization': `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) } },
