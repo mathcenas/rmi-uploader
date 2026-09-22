@@ -5,6 +5,7 @@ const fs       = require('fs');
 const AdmZip   = require('adm-zip');
 const https    = require('https');
 const { spawn, execFile } = require('child_process');
+const { B, EMAIL_FONT, emailLogo, emailWrap, emailHeader, emailFooter } = require('./emailBrand');
 
 const app             = express();
 const PORT            = process.env.PORT            || 8080;
@@ -200,26 +201,29 @@ app.post('/upload', uploadAuth, (req, res) => {
       // ── Notificacion email ─────────────────────────────────────────────────
       if (email) {
         const fileList = uploadedFiles.map(f => `<li style="margin:2px 0;">${f}</li>`).join('');
-        const envBadgeColor = appCfg.env === 'Testing' ? '#0369a1' : '#15803d';
-        const envBadgeBg    = appCfg.env === 'Testing' ? '#e0f2fe' : '#dcfce7';
         sendResend(
           email,
           `[RMI] Archivos recibidos — deploy pendiente — ${appCfg.label} (${appCfg.env})`,
-          `<div style="font-family:sans-serif;max-width:480px;color:#1e293b">
-            <h2 style="color:#2563eb;margin-bottom:8px">RMI Uploader</h2>
-            <p style="margin-bottom:4px">Los archivos fueron recibidos correctamente.</p>
-            <p style="margin-bottom:16px;padding:10px 14px;background:#fef9c3;border-left:4px solid #ca8a04;font-size:13px;color:#854d0e;">
-              <strong>Deploy pendiente.</strong> Un administrador debe ejecutar <code>./update-rmi.sh ${app_id}</code> en el servidor para aplicar los cambios.
-            </p>
-            <table style="width:100%;border-collapse:collapse;font-size:13px">
-              <tr><td style="padding:6px 0;color:#64748b;width:120px">Aplicacion</td><td><strong>${appCfg.label}</strong></td></tr>
-              <tr><td style="padding:6px 0;color:#64748b">Ambiente</td><td><span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;background:${envBadgeBg};color:${envBadgeColor}">${appCfg.env}</span></td></tr>
-              <tr><td style="padding:6px 0;color:#64748b">Guardado en</td><td><code style="font-size:12px">${destDir}</code></td></tr>
-              <tr><td style="padding:6px 0;color:#64748b">Fecha</td><td>${fmtDate(new Date())}</td></tr>
-              <tr><td style="padding:6px 0;color:#64748b">Archivos</td><td><ul style="margin:0;padding-left:16px">${fileList}</ul></td></tr>
+          emailWrap(`
+            ${emailHeader({
+              logoHtml: emailLogo(),
+              senderName: 'RMI Uploader',
+              label: 'DEPLOY PENDIENTE',
+              accentColor: '#f59e0b',
+              title: appCfg.label,
+              subtitle: appCfg.env,
+            })}
+            <p style="color:${B.textMain};font-size:14px;line-height:1.6;margin:0 0 16px;">Los archivos fueron recibidos correctamente.</p>
+            <div style="background:#FFFBEB;border-left:3px solid #B45309;border-radius:0 8px 8px 0;padding:14px 16px;margin:0 0 16px;">
+              <p style="color:#92400e;font-size:13px;line-height:1.5;margin:0;"><strong>Deploy pendiente.</strong> Un administrador debe aplicar el deploy de <code>${app_id}</code> desde el panel admin para que los cambios entren en vigencia.</p>
+            </div>
+            <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;">
+              <tr><td style="padding:6px 0;color:${B.textMid};width:120px">Guardado en</td><td><code style="font-size:12px">${destDir}</code></td></tr>
+              <tr><td style="padding:6px 0;color:${B.textMid};vertical-align:top">Fecha</td><td>${fmtDate(new Date())}</td></tr>
+              <tr><td style="padding:6px 0;color:${B.textMid};vertical-align:top">Archivos</td><td><ul style="margin:0;padding-left:16px">${fileList}</ul></td></tr>
             </table>
-            <p style="margin-top:20px;font-size:12px;color:#94a3b8">Este mensaje fue generado automaticamente por RMI Uploader.</p>
-          </div>`
+            ${emailFooter()}
+          `)
         );
       }
 
@@ -375,17 +379,22 @@ function runDeploy(res, app_id, srcPath, notify, uploaderEmail, label) {
     const deployDate = fmtDate(new Date());
     const accion      = label === 'restore' ? 'Restauracion aplicada' : 'Deploy aplicado';
     const subject     = `[RMI] ${accion} — ${appCfg.label} (${appCfg.env})`;
-    const html = `<div style="font-family:sans-serif;max-width:480px;color:#1e293b">
-      <h2 style="color:#16a34a;margin-bottom:8px">RMI ${label === 'restore' ? 'Restore' : 'Deploy'} — ${code === 0 ? 'OK' : 'ERROR'}</h2>
-      <table style="width:100%;border-collapse:collapse;font-size:13px">
-        <tr><td style="padding:6px 0;color:#64748b;width:120px">Aplicacion</td><td><strong>${appCfg.label}</strong></td></tr>
-        <tr><td style="padding:6px 0;color:#64748b">Ambiente</td><td><strong>${appCfg.env}</strong></td></tr>
-        <tr><td style="padding:6px 0;color:#64748b">Directorio</td><td><code style="font-size:12px">${appCfg.dir}</code></td></tr>
-        <tr><td style="padding:6px 0;color:#64748b">Fecha</td><td>${deployDate}</td></tr>
-        <tr><td style="padding:6px 0;color:#64748b">Estado</td><td><strong>${code === 0 ? 'Exitoso' : 'Fallo (codigo ' + code + ')'}</strong></td></tr>
+    const html = emailWrap(`
+      ${emailHeader({
+        logoHtml: emailLogo(),
+        senderName: 'RMI Uploader',
+        label: code === 0 ? 'EXITOSO' : 'ERROR',
+        accentColor: code === 0 ? '#10b981' : '#ef4444',
+        title: accion,
+        subtitle: `${appCfg.label} (${appCfg.env})`,
+      })}
+      <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="font-size:13px;">
+        <tr><td style="padding:6px 0;color:${B.textMid};width:120px">Directorio</td><td><code style="font-size:12px">${appCfg.dir}</code></td></tr>
+        <tr><td style="padding:6px 0;color:${B.textMid}">Fecha</td><td>${deployDate}</td></tr>
+        <tr><td style="padding:6px 0;color:${B.textMid}">Estado</td><td><strong>${code === 0 ? 'Exitoso' : 'Fallo (codigo ' + code + ')'}</strong></td></tr>
       </table>
-      <p style="margin-top:20px;font-size:12px;color:#94a3b8">RMI ${label === 'restore' ? 'Restore' : 'Deploy'} automatico.</p>
-    </div>`;
+      ${emailFooter()}
+    `);
 
     if (code === 0) {
       if (uploaderEmail) sendResend(uploaderEmail, subject, html);
