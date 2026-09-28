@@ -234,12 +234,31 @@ sobreescribir — no hay forma de "perder" el estado pre-restore.
 | Variable              | Uso                                                             |
 |-----------------------|------------------------------------------------------------------|
 | `UPLOAD_PASSWORD`     | Contraseña del perfil usuario (`/upload`).                      |
-| `ADMIN_PASSWORD`      | Contraseña del panel admin (todo `/mgmt/*`).                    |
+| `ADMIN_PASSWORD`      | Contraseña de login del panel admin (`POST /mgmt/login`).       |
+| `JWT_SECRET`          | Firma los JWT de sesion del admin (24hs). Cambiar en produccion (`openssl rand -hex 32`) — si no se define usa un default inseguro. |
 | `UPLOAD_DIR`          | Default `/tmp/rmi`.                                              |
 | `BACKUPS_DIR`         | Default `/backups`.                                              |
 | `RESEND_API_KEY`      | Si está vacío, se omiten los emails (se loguea nomás).           |
 | `RESEND_FROM`         | Remitente de los emails.                                         |
 | `DEPLOY_NOTIFY_EMAIL` | Email de admin por defecto para notificaciones de deploy/restore.|
+
+## Autenticacion del panel admin
+
+No hay tabla de usuarios — `ADMIN_PASSWORD` sigue siendo una única contraseña
+compartida. Lo que cambió es cómo se usa esa contraseña en cada request:
+
+1. `POST /mgmt/login` valida la contraseña (limitado a **5 intentos cada 15
+   minutos por IP** — `express-rate-limit`) y devuelve un JWT firmado
+   (`jsonwebtoken`), con `{ id: 1, username: 'admin', role: 'admin' }` y
+   **24hs de expiración**.
+2. Todos los `/mgmt/*` (menos `/mgmt/login`) exigen ese token en
+   `Authorization: Bearer <token>`, verificado por `authenticateToken`
+   (firma + expiración) en vez de comparar contra la contraseña en texto
+   plano en cada request.
+3. `admin.html` guarda el token en `localStorage` — si ya hay uno vigente al
+   abrir la página, entra directo sin pedir contraseña de nuevo; si el
+   servidor responde 401 (token vencido o inválido) en cualquier momento,
+   fuerza logout y vuelve a la pantalla de login.
 
 ## Seguridad — importante
 

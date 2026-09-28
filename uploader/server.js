@@ -1,10 +1,12 @@
-const express  = require('express');
-const multer   = require('multer');
-const path     = require('path');
-const fs       = require('fs');
-const AdmZip   = require('adm-zip');
-const https    = require('https');
-const crypto   = require('crypto');
+const express     = require('express');
+const multer      = require('multer');
+const path        = require('path');
+const fs          = require('fs');
+const AdmZip      = require('adm-zip');
+const https       = require('https');
+const crypto      = require('crypto');
+const jwt         = require('jsonwebtoken');
+const rateLimit   = require('express-rate-limit');
 const { spawn, execFile } = require('child_process');
 const { B, EMAIL_FONT, emailLogo, emailWrap, emailHeader, emailFooter } = require('./emailBrand');
 
@@ -14,6 +16,7 @@ const UPLOAD_DIR      = process.env.UPLOAD_DIR      || '/tmp/rmi';
 const BACKUPS_DIR     = process.env.BACKUPS_DIR     || '/backups';
 const UPLOAD_PASSWORD = process.env.UPLOAD_PASSWORD || 'rmi2024';
 const ADMIN_PASSWORD  = process.env.ADMIN_PASSWORD  || 'admin2024';
+const JWT_SECRET      = process.env.JWT_SECRET       || 'rmi-uploader-dev-secret-cambiar-en-produccion';
 const RESEND_API_KEY  = process.env.RESEND_API_KEY  || '';
 const RESEND_FROM     = process.env.RESEND_FROM     || 'RMI Uploader <noreply@cenas.com.uy>';
 
@@ -82,12 +85,27 @@ function uploadAuth(req, res, next) {
   next();
 }
 
-function adminAuth(req, res, next) {
-  if (req.headers['x-admin-password'] !== ADMIN_PASSWORD) {
-    return res.status(401).json({ error: 'Acceso denegado' });
-  }
-  next();
+// JWT: firmado con expiracion de 24hs, contiene id/username/role del admin.
+// No hay tabla de usuarios (una sola contraseña compartida), asi que el
+// login siempre emite el mismo usuario fijo una vez validada ADMIN_PASSWORD.
+function authenticateToken(req, res, next) {
+  const authHeader = req.headers['authorization'] || '';
+  const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
+  if (!token) return res.status(401).json({ error: 'Acceso denegado' });
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) return res.status(401).json({ error: 'Sesion invalida o expirada' });
+    req.user = user;
+    next();
+  });
 }
+
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Demasiados intentos. Probá de nuevo en 15 minutos.' },
+});
 
 // ── Multer — temp storage ─────────────────────────────────────────────────────
 
@@ -283,6 +301,17 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', service: 'rmi-uploader', uptime: Math.floor(process.uptime()), timestamp: fmtDate(new Date()) });
 });
 
+// ── Admin login ───────────────────────────────────────────────────────────────
+
+app.post('/mgmt/login', loginLimiter, (req, res) => {
+  const { password } = req.body || {};
+  if (password !== ADMIN_PASSWORD) {
+    return res.status(401).json({ error: 'Contraseña incorrecta' });
+  }
+  const token = jwt.sign({ id: 1, username: 'admin', role: 'admin' }, JWT_SECRET, { expiresIn: '24h' });
+  res.json({ ok: true, token });
+});
+
 // ── Admin upload (sin filtro) ─────────────────────────────────────────────────
 
 const adminUploadStorage = multer.diskStorage({
@@ -298,7 +327,7 @@ const adminUploadStorage = multer.diskStorage({
 });
 const adminUpload = multer({ storage: adminUploadStorage, limits: { fileSize: 200 * 1024 * 1024, files: 20 } });
 
-app.post('/mgmt/upload', adminAuth, (req, res) => {
+app.post('/mgmt/upload', authenticateToken, (req, res) => {
   adminUpload.array('files')(req, res, (err) => {
     if (err) return res.status(400).json({ error: err.message });
     if (!req.files || req.files.length === 0) return res.status(400).json({ error: 'No se recibieron archivos' });
@@ -308,7 +337,7 @@ app.post('/mgmt/upload', adminAuth, (req, res) => {
 
 // ── Admin ─────────────────────────────────────────────────────────────────────
 
-app.get('/mgmt/files', adminAuth, (req, res) => {
+app.get('/mgmt/files', authenticateToken, (req, res) => {
   try {
     const entries = fs.readdirSync(UPLOAD_DIR)
       .filter(f => !f.startsWith('_tmp_'))
@@ -326,7 +355,7 @@ app.get('/mgmt/files', adminAuth, (req, res) => {
   }
 });
 
-app.get('/mgmt/download/:name', adminAuth, (req, res) => {
+app.get('/mgmt/download/:name', authenticateToken, (req, res) => {
   const name = req.params.name;
   if (!name || name.includes('/') || name.includes('..')) {
     return res.status(400).json({ error: 'Nombre invalido' });
@@ -351,7 +380,7 @@ app.get('/mgmt/download/:name', adminAuth, (req, res) => {
   }
 });
 
-app.post('/mgmt/delete', adminAuth, (req, res) => {
+app.post('/mgmt/delete', authenticateToken, (req, res) => {
   const { name } = req.body || {};
   if (!name || typeof name !== 'string' || name.includes('/') || name.includes('..')) {
     return res.status(400).json({ error: 'Nombre invalido' });
@@ -428,7 +457,7 @@ function runDeploy(res, app_id, srcPath, notify, uploaderEmail, label) {
   });
 }
 
-app.post('/mgmt/deploy', adminAuth, (req, res) => {
+app.post('/mgmt/deploy', authenticateToken, (req, res) => {
   const { name, email } = req.body || {};
   if (!name || typeof name !== 'string' || name.includes('/') || name.includes('..')) {
     return res.status(400).json({ error: 'Nombre invalido' });
@@ -455,7 +484,7 @@ app.post('/mgmt/deploy', adminAuth, (req, res) => {
   runDeploy(res, app_id, uploadPath, notify, uploaderEmail, 'deploy');
 });
 
-app.post('/mgmt/restore', adminAuth, (req, res) => {
+app.post('/mgmt/restore', authenticateToken, (req, res) => {
   const { name, email } = req.body || {};
   if (!name || typeof name !== 'string' || name.includes('/') || name.includes('..')) {
     return res.status(400).json({ error: 'Nombre invalido' });
@@ -473,7 +502,7 @@ app.post('/mgmt/restore', adminAuth, (req, res) => {
   runDeploy(res, app_id, backupPath, notify, '', 'restore');
 });
 
-app.get('/mgmt/backups', adminAuth, (req, res) => {
+app.get('/mgmt/backups', authenticateToken, (req, res) => {
   try {
     const entries = fs.readdirSync(BACKUPS_DIR)
       .map(name => {
@@ -490,7 +519,7 @@ app.get('/mgmt/backups', adminAuth, (req, res) => {
   }
 });
 
-app.get('/mgmt/container-status', adminAuth, (req, res) => {
+app.get('/mgmt/container-status', authenticateToken, (req, res) => {
   execFile('docker', ['ps', '-a', '--format', '{{.Names}}|{{.State}}'], (err, stdout) => {
     const states = {};
     if (!err) {
@@ -507,7 +536,7 @@ app.get('/mgmt/container-status', adminAuth, (req, res) => {
   });
 });
 
-app.get('/mgmt/readme', adminAuth, (req, res) => {
+app.get('/mgmt/readme', authenticateToken, (req, res) => {
   try {
     res.type('text/plain').send(fs.readFileSync(path.join(__dirname, 'README.md'), 'utf-8'));
   } catch (e) {
