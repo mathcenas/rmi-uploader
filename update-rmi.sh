@@ -125,6 +125,16 @@ for item in "$LATEST"/*; do
   echo "Copiado: $name → $APP_DIR/"
 done
 
+# ── Verificar integridad de la copia (sha256) ─────────────────────────────────
+if [ -f "$LATEST/_checksums.sha256" ]; then
+  echo "Verificando integridad (sha256) de los archivos copiados..."
+  if (cd "$APP_DIR" && sha256sum -c "$LATEST/_checksums.sha256"); then
+    echo "Integridad OK — los archivos en $APP_DIR coinciden con el hash del upload."
+  else
+    echo "ALERTA: algun archivo copiado no coincide con su hash original (posible corrupcion en la copia)."
+  fi
+fi
+
 # ── Reiniciar contenedor ──────────────────────────────────────────────────────
 echo "Reiniciando contenedor $CONTAINER..."
 docker restart "$CONTAINER" 2>&1 && RESTART_OK=true || RESTART_OK=false

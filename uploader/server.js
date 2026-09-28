@@ -4,6 +4,7 @@ const path     = require('path');
 const fs       = require('fs');
 const AdmZip   = require('adm-zip');
 const https    = require('https');
+const crypto   = require('crypto');
 const { spawn, execFile } = require('child_process');
 const { B, EMAIL_FONT, emailLogo, emailWrap, emailHeader, emailFooter } = require('./emailBrand');
 
@@ -197,6 +198,21 @@ app.post('/upload', uploadAuth, (req, res) => {
       // ── Guardar meta (email del uploader) ─────────────────────────────────
       const meta = { email, app: app_id, label: appCfg.label, env: appCfg.env, date: new Date().toISOString() };
       try { fs.writeFileSync(path.join(destDir, '_meta.json'), JSON.stringify(meta)); } catch {}
+
+      // ── Checksums (para validar integridad en el deploy) ────────────────────
+      try {
+        const checksumLines = uploadedFiles
+          .map(rel => {
+            try {
+              const hash = crypto.createHash('sha256').update(fs.readFileSync(path.join(destDir, rel))).digest('hex');
+              return `${hash}  ${rel}`;
+            } catch {
+              return null;
+            }
+          })
+          .filter(Boolean);
+        fs.writeFileSync(path.join(destDir, '_checksums.sha256'), checksumLines.join('\n') + '\n');
+      } catch {}
 
       // ── Notificacion email ─────────────────────────────────────────────────
       if (email) {
