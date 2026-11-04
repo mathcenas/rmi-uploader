@@ -229,6 +229,32 @@ apuntando a una carpeta de `BACKUPS_DIR` en vez de a un upload. Como usa el
 mismo script, restaurar también genera un backup del estado actual antes de
 sobreescribir — no hay forma de "perder" el estado pre-restore.
 
+## Sincronizar DB de prod a testing (`sync-db.sh`)
+
+Script manual, a demanda — **no** se ejecuta nunca como parte de un deploy
+normal (`update-rmi.sh` no lo llama, el panel admin no tiene botón para
+esto). Corre directo en el host, con `sudo`:
+
+```bash
+sudo ./sync-db.sh gestion        # copia /srv/gestion-rmi/prod/data -> testing
+sudo ./sync-db.sh contabilidad   # idem para contabilidad-rmi
+```
+
+Qué hace:
+1. Detecta el `.db` principal en `prod/data` (no asume el nombre, busca el
+   único `*.db` que no sea `-shm`/`-wal`).
+2. Si el contenedor de prod tiene `sqlite3` instalado, hace
+   `PRAGMA wal_checkpoint(TRUNCATE)` en caliente (sin downtime) antes de
+   copiar — vuelca el WAL adentro del `.db` para que una copia simple del
+   archivo principal quede consistente.
+3. Si no hay `sqlite3` disponible ahí adentro, para el contenedor de prod un
+   instante, copia `.db` + `.db-shm` + `.db-wal` juntos, y lo vuelve a
+   levantar — más seguro que copiar un WAL en modo write-ahead sin
+   checkpoint, que puede dejar afuera transacciones recientes.
+4. Antes de pisar nada en testing, hace un backup de lo que había ahí en
+   `testing/data/backup_<timestamp>/`.
+5. Reinicia el contenedor de testing para que levante el DB nuevo.
+
 ## Variables de entorno (`.env`, no versionado)
 
 | Variable              | Uso                                                             |
