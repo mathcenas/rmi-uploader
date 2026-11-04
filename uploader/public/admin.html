@@ -416,10 +416,16 @@
   <div class="made-by">made by <a href="#" tabindex="-1">Cenas-Support</a></div>
 
   <script>
-    let adminPassword = '';
+    let authToken = '';
+    try { authToken = localStorage.getItem('rmi_admin_token') || ''; } catch {}
     let pendingDelete = null;
     let pendingDeploy = null;
     let pendingMode   = 'deploy'; // 'deploy' | 'restore'
+
+    function authFetch(url, opts = {}) {
+      opts.headers = { ...(opts.headers || {}), 'Authorization': `Bearer ${authToken}` };
+      return fetch(url, opts);
+    }
 
     const APP_CONFIGS = {
       gestion_prod:      { label: 'Gestion RMI',      env: 'Produccion', badgeClass: 'badge-blue'   },
@@ -431,25 +437,44 @@
 
     document.getElementById('adminPass').addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
 
-    function doLogin() {
+    async function doLogin() {
       const pass = document.getElementById('adminPass').value.trim();
       if (!pass) return;
-      adminPassword = pass;
-      loadFiles(true);
+      try {
+        const res = await fetch('/mgmt/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: pass })
+        });
+        if (res.status === 401) { showLoginAlert('Contraseña incorrecta'); return; }
+        if (res.status === 429) { showLoginAlert('Demasiados intentos. Probá de nuevo en unos minutos.'); return; }
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const data = await res.json();
+        authToken = data.token;
+        try { localStorage.setItem('rmi_admin_token', authToken); } catch {}
+        loadFiles(true);
+      } catch (e) {
+        showLoginAlert('Error de conexion: ' + e.message);
+      }
     }
 
     function logout() {
-      adminPassword = '';
+      authToken = '';
+      try { localStorage.removeItem('rmi_admin_token'); } catch {}
       document.getElementById('mainPanel').style.display  = 'none';
       document.getElementById('loginWrap').style.display  = 'flex';
       document.getElementById('adminPass').value = '';
     }
 
+    // Si ya hay un token guardado (sesion de hasta 24hs), entrar directo sin pedir contraseña de nuevo.
+    if (authToken) loadFiles(true);
+
     async function loadFiles(fromLogin = false) {
       try {
-        const res = await fetch('/mgmt/files', { headers: { 'x-admin-password': adminPassword } });
+        const res = await authFetch('/mgmt/files');
         if (res.status === 401) {
-          if (fromLogin) showLoginAlert('Contraseña incorrecta');
+          logout();
+          showLoginAlert(fromLogin ? 'Contraseña incorrecta' : 'Sesion expirada — iniciá sesion de nuevo.');
           return;
         }
         if (!res.ok) {
@@ -473,7 +498,7 @@
     async function loadContainerStatus() {
       const box = document.getElementById('containerStatus');
       try {
-        const res = await fetch('/mgmt/container-status', { headers: { 'x-admin-password': adminPassword } });
+        const res = await authFetch('/mgmt/container-status');
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         const stateLabel = { running: 'corriendo', exited: 'detenido', 'not-found': 'no existe' };
@@ -493,7 +518,7 @@
 
     async function loadBackups() {
       try {
-        const res = await fetch('/mgmt/backups', { headers: { 'x-admin-password': adminPassword } });
+        const res = await authFetch('/mgmt/backups');
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const data = await res.json();
         renderBackups(data.backups || []);
@@ -590,9 +615,7 @@
     // ── Download ──────────────────────────────────────────────────────────────
 
     function downloadFile(name) {
-      fetch(`/mgmt/download/${encodeURIComponent(name)}`, {
-        headers: { 'x-admin-password': adminPassword }
-      })
+      authFetch(`/mgmt/download/${encodeURIComponent(name)}`)
         .then(res => {
           if (!res.ok) { showMainAlert('error', 'Error al descargar'); return null; }
           return res.blob();
@@ -629,9 +652,9 @@
       const name = pendingDelete;
       closeConfirm();
       try {
-        const res  = await fetch('/mgmt/delete', {
+        const res  = await authFetch('/mgmt/delete', {
           method: 'POST',
-          headers: { 'x-admin-password': adminPassword, 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name })
         });
         const data = await res.json();
@@ -700,9 +723,9 @@
       document.getElementById('deployCancelBtn').textContent = 'Cerrar';
 
       try {
-        const res = await fetch(isRestore ? '/mgmt/restore' : '/mgmt/deploy', {
+        const res = await authFetch(isRestore ? '/mgmt/restore' : '/mgmt/deploy', {
           method: 'POST',
-          headers: { 'x-admin-password': adminPassword, 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ name, email: email || undefined })
         });
 
@@ -765,7 +788,7 @@
       const box = document.getElementById('docsContent');
       box.innerHTML = '<div class="docs-loading"><span class="spinner"></span> Cargando...</div>';
       try {
-        const res = await fetch('/mgmt/readme', { headers: { 'x-admin-password': adminPassword } });
+        const res = await authFetch('/mgmt/readme');
         if (!res.ok) throw new Error(`HTTP ${res.status}`);
         const md = await res.text();
         box.innerHTML = renderMarkdown(md);
@@ -910,9 +933,8 @@
 
       try {
         progressB.style.width = '50%';
-        const res  = await fetch('/mgmt/upload', {
+        const res  = await authFetch('/mgmt/upload', {
           method: 'POST',
-          headers: { 'x-admin-password': adminPassword },
           body: fd
         });
         progressB.style.width = '100%';

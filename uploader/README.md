@@ -229,17 +229,62 @@ apuntando a una carpeta de `BACKUPS_DIR` en vez de a un upload. Como usa el
 mismo script, restaurar también genera un backup del estado actual antes de
 sobreescribir — no hay forma de "perder" el estado pre-restore.
 
+## Sincronizar DB de prod a testing (`sync-db.sh`)
+
+Script manual, a demanda — **no** se ejecuta nunca como parte de un deploy
+normal (`update-rmi.sh` no lo llama, el panel admin no tiene botón para
+esto). Corre directo en el host, con `sudo`:
+
+```bash
+sudo ./sync-db.sh gestion        # copia /srv/gestion-rmi/prod/data -> testing
+sudo ./sync-db.sh contabilidad   # idem para contabilidad-rmi
+```
+
+Qué hace:
+1. Detecta el `.db` principal en `prod/data` (no asume el nombre, busca el
+   único `*.db` que no sea `-shm`/`-wal`).
+2. Si el contenedor de prod tiene `sqlite3` instalado, hace
+   `PRAGMA wal_checkpoint(TRUNCATE)` en caliente (sin downtime) antes de
+   copiar — vuelca el WAL adentro del `.db` para que una copia simple del
+   archivo principal quede consistente.
+3. Si no hay `sqlite3` disponible ahí adentro, para el contenedor de prod un
+   instante, copia `.db` + `.db-shm` + `.db-wal` juntos, y lo vuelve a
+   levantar — más seguro que copiar un WAL en modo write-ahead sin
+   checkpoint, que puede dejar afuera transacciones recientes.
+4. Antes de pisar nada en testing, hace un backup de lo que había ahí en
+   `testing/data/backup_<timestamp>/`.
+5. Reinicia el contenedor de testing para que levante el DB nuevo.
+
 ## Variables de entorno (`.env`, no versionado)
 
 | Variable              | Uso                                                             |
 |-----------------------|------------------------------------------------------------------|
 | `UPLOAD_PASSWORD`     | Contraseña del perfil usuario (`/upload`).                      |
-| `ADMIN_PASSWORD`      | Contraseña del panel admin (todo `/mgmt/*`).                    |
+| `ADMIN_PASSWORD`      | Contraseña de login del panel admin (`POST /mgmt/login`).       |
+| `JWT_SECRET`          | Firma los JWT de sesion del admin (24hs). Cambiar en produccion (`openssl rand -hex 32`) — si no se define usa un default inseguro. |
 | `UPLOAD_DIR`          | Default `/tmp/rmi`.                                              |
 | `BACKUPS_DIR`         | Default `/backups`.                                              |
 | `RESEND_API_KEY`      | Si está vacío, se omiten los emails (se loguea nomás).           |
 | `RESEND_FROM`         | Remitente de los emails.                                         |
 | `DEPLOY_NOTIFY_EMAIL` | Email de admin por defecto para notificaciones de deploy/restore.|
+
+## Autenticacion del panel admin
+
+No hay tabla de usuarios — `ADMIN_PASSWORD` sigue siendo una única contraseña
+compartida. Lo que cambió es cómo se usa esa contraseña en cada request:
+
+1. `POST /mgmt/login` valida la contraseña (limitado a **5 intentos cada 15
+   minutos por IP** — `express-rate-limit`) y devuelve un JWT firmado
+   (`jsonwebtoken`), con `{ id: 1, username: 'admin', role: 'admin' }` y
+   **24hs de expiración**.
+2. Todos los `/mgmt/*` (menos `/mgmt/login`) exigen ese token en
+   `Authorization: Bearer <token>`, verificado por `authenticateToken`
+   (firma + expiración) en vez de comparar contra la contraseña en texto
+   plano en cada request.
+3. `admin.html` guarda el token en `localStorage` — si ya hay uno vigente al
+   abrir la página, entra directo sin pedir contraseña de nuevo; si el
+   servidor responde 401 (token vencido o inválido) en cualquier momento,
+   fuerza logout y vuelve a la pantalla de login.
 
 ## Seguridad — importante
 
