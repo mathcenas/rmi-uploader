@@ -53,7 +53,7 @@ case "$APP" in
     APP_LABEL="Contabilidad RMI"
     APP_ENV="Testing"
     APP_DIR="/srv/contabilidad-rmi/testing"
-    CONTAINER="contabilidad-rmi-testing"
+    CONTAINER="testing-contabilidad-rmi"
     VALIDATE_FILE="server.js"
     CONTAINER_VALIDATE_PATH="/app/server.js"
     ;;

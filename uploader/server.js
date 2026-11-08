@@ -24,7 +24,7 @@ const APPS = {
   gestion_prod:      { label: 'Gestion RMI',      env: 'Produccion', dir: '/srv/gestion-rmi/prod',        container: 'gestion-rmi' },
   gestion_test:      { label: 'Gestion RMI',      env: 'Testing',    dir: '/srv/gestion-rmi/testing',     container: 'gestion-rmi-testing' },
   contabilidad_prod: { label: 'Contabilidad RMI', env: 'Produccion', dir: '/srv/contabilidad-rmi/prod',   container: 'contabilidad-rmi' },
-  contabilidad_test: { label: 'Contabilidad RMI', env: 'Testing',    dir: '/srv/contabilidad-rmi/testing',container: 'contabilidad-rmi-testing' },
+  contabilidad_test: { label: 'Contabilidad RMI', env: 'Testing',    dir: '/srv/contabilidad-rmi/testing',container: 'testing-contabilidad-rmi' },
   portal_web_prod:   { label: 'Portal Web',       env: 'Produccion', dir: '/srv/rmi-web',                  container: 'rmi_consultores_apache' },
 };
 

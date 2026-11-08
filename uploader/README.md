@@ -27,7 +27,7 @@ Todo pasa por el objeto `APPS` en `server.js` y el `case` de `update-rmi.sh` —
 | `gestion_prod`         | `/srv/gestion-rmi/prod`               | `gestion-rmi`               |
 | `gestion_test`         | `/srv/gestion-rmi/testing`            | `gestion-rmi-testing`       |
 | `contabilidad_prod`    | `/srv/contabilidad-rmi/prod`          | `contabilidad-rmi`          |
-| `contabilidad_test`    | `/srv/contabilidad-rmi/testing`       | `contabilidad-rmi-testing`  |
+| `contabilidad_test`    | `/srv/contabilidad-rmi/testing`       | `testing-contabilidad-rmi`  |
 | `portal_web_prod`      | `/srv/rmi-web`                        | `rmi_consultores_apache`    |
 
 Portal Web es un caso distinto a las demás: no es una app Node, es un
@@ -65,8 +65,19 @@ depende de que tengan el `container_name:` exacto de la tabla de arriba. Lo
 único que le importa al uploader de cada uno es esa línea — el resto
 (imagen, puertos, volúmenes de datos, red) es cosa de cada servicio.
 
+**⚠️ Agregá siempre un `name:` propio y único** (primera línea del archivo,
+reemplazando el `version:` obsoleto). Docker Compose, si no le das un nombre
+de proyecto explícito, usa el **nombre de la carpeta** — y como varias apps
+usan `/prod` y `/testing` como nombre de subcarpeta, Compose las trata como
+si fueran el mismo proyecto. Esto ya nos pasó una vez: un `docker compose up
+--build` corrido desde `contabilidad-rmi/testing` listaba (y podía afectar)
+el contenedor de `gestion-rmi`, porque las dos carpetas se llaman "prod"
+en algún punto de su árbol. Con `name:` cada proyecto queda aislado de
+verdad, sin importar que las carpetas se llamen igual.
+
 **`/srv/gestion-rmi/prod/docker-compose.yml`** (producción):
 ```yaml
+name: gestion-prod
 services:
   gestion-rmi:
     build: .
@@ -82,6 +93,7 @@ services:
 **`/srv/gestion-rmi/testing/docker-compose.yml`** (testing — mismo servicio,
 otro puerto y otro nombre para no chocar con el de prod):
 ```yaml
+name: gestion-testing
 services:
   gestion-rmi-testing:
     build: .
@@ -96,21 +108,27 @@ services:
 
 **`/srv/contabilidad-rmi/prod/docker-compose.yml`**:
 ```yaml
+name: contabilidad-prod
 services:
-  contabilidad-rmi:
+  contabilidad:
     build: .
     container_name: contabilidad-rmi
     restart: unless-stopped
     ports:
-      - "3002:3000"   # ajustar al puerto real que use esta app
+      - "3012:3000"
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
 ```
 
 **`/srv/contabilidad-rmi/testing/docker-compose.yml`**: ya está armado en el
-server con el mismo patrón que prod (`container_name: contabilidad-rmi-testing`).
+server con `name: contabilidad-testing` y `container_name: testing-contabilidad-rmi`
+(ojo con el orden de las palabras — no es `contabilidad-rmi-testing`).
 
 **`/srv/rmi-web/docker-compose.yml`** (Portal Web — ya existe, no es una app
 Node, es Apache sirviendo un `index.html` suelto):
 ```yaml
+name: rmi-web
 services:
   web:
     image: httpd:alpine
