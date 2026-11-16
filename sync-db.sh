@@ -21,7 +21,7 @@ case "$APP" in
     PROD_DATA="/srv/contabilidad-rmi/prod/data"
     TEST_DATA="/srv/contabilidad-rmi/testing/data"
     PROD_CONTAINER="contabilidad-rmi"
-    TEST_CONTAINER="contabilidad-rmi-testing"
+    TEST_CONTAINER="testing-contabilidad-rmi"
     ;;
   *)
     echo "Uso: $0 gestion|contabilidad"
