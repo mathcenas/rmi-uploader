@@ -136,8 +136,17 @@ if [ -f "$LATEST/_checksums.sha256" ]; then
 fi
 
 # ── Reiniciar contenedor ──────────────────────────────────────────────────────
-echo "Reiniciando contenedor $CONTAINER..."
-docker restart "$CONTAINER" 2>&1 && RESTART_OK=true || RESTART_OK=false
+# "docker compose up -d --build" en vez de "docker restart": algunas apps
+# hornean el codigo en la imagen (COPY en el Dockerfile) en vez de usar
+# bind-mount, y un simple restart no aplica los archivos nuevos. --build
+# funciona para los dos casos (con cache de capas, no rebuildea de cero si
+# el Dockerfile/package.json no cambiaron).
+echo "Reiniciando contenedor $CONTAINER (docker compose up -d --build)..."
+if (cd "$APP_DIR" && docker compose up -d --build) 2>&1; then
+  RESTART_OK=true
+else
+  RESTART_OK=false
+fi
 
 # ── Validar que el contenedor esta sirviendo el archivo recien copiado ────────
 if [ "$RESTART_OK" = "true" ] && [ -n "$VALIDATE_FILE" ] && [ -f "$APP_DIR/$VALIDATE_FILE" ]; then

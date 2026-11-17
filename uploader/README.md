@@ -226,19 +226,24 @@ que apunten al nombre real.
 3. El script:
    - hace backup de `APP_DIR` actual en `BACKUPS_DIR/<app_id>_<timestamp>/`,
    - copia los archivos nuevos a `APP_DIR`,
-   - hace `docker restart <container>`,
-   - **valida** que el restart haya funcionado: compara el hash MD5 del
+   - corre `cd "$APP_DIR" && docker compose up -d --build` (no un simple
+     `docker restart`) — algunas apps hornean el código en la imagen
+     (`COPY` en el Dockerfile) en vez de bind-mount, y un restart no les
+     aplica los archivos nuevos. `--build` funciona para los dos casos;
+     con cache de capas no rebuildea de cero si el Dockerfile/package.json
+     no cambiaron, pero sí tarda más que un restart (puede ser bastante
+     más, dependiendo de la app — contamos minuto y medio en un caso real).
+   - **valida** que haya funcionado: compara el hash MD5 del
      `VALIDATE_FILE` (`server.js` para las apps Node, `index.html` para
      Portal Web) recién copiado en el host contra el que el contenedor
      tiene adentro en `CONTAINER_VALIDATE_PATH`.
 4. El log se ve en vivo en el panel (SSE), incluida la linea de validacion.
-   Si `docker restart` falla porque el contenedor no existe todavía, los
-   archivos igual quedan copiados — solo falta levantar el contenedor a mano
-   una vez. Si el restart funciona pero la validacion da **ALERTA** (los
-   hashes no coinciden), significa que esa app arma su imagen con `COPY`
-   en vez de bind-mount — un restart no alcanza, hace falta
-   `docker compose up -d --build` en su lugar (avisar para ajustar el script
-   si pasa esto).
+   Si `docker compose up -d --build` falla porque el contenedor/proyecto no
+   existe todavía, los archivos igual quedan copiados — solo falta levantar
+   el contenedor a mano una vez. La validación **ALERTA** (host y contenedor
+   no coinciden) ya no debería pasar en uso normal, porque cada deploy
+   rebuildea — si igual aparece, revisar que la imagen de `rmi-uploader`
+   tenga el plugin `docker-cli-compose` instalado (ver Dockerfile).
 
 ## Restore
 
